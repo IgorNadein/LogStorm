@@ -4,7 +4,7 @@
 Запуск GUI LogStorm (Fluent Design)
 """
 
-from gui_app_fluent import main
+from gui.main_window import main
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,71 @@
+# План рефакторинга корневой папки
+
+## Документация -> docs/
+### Гайды (docs/guides/)
+- ANALYSIS_CONFIG_GUIDE.md
+- CHEATSHEET.md
+- CONFIGURATION_GUIDE.md
+- FLUENT_GUI_GUIDE.md
+- FORMATTING_RULES_GUIDE.md
+- GUI_GUIDE.md
+- GUI_NDJSON_GUIDE.md
+- GUI_PERSON_MANAGER_GUIDE.md
+- NDJSON_MAPPING_GUIDE.md
+- QUICKSTART.md
+- QUICKSTART_NDJSON.md
+- QUICK_CONFIG.md
+- SECURITY.md
+- TESTING_PERSON_MAPPER.md
+- THRESHOLDS_CONFIG.md
+
+### Чейнджлоги (docs/changelogs/)
+- CHANGELOG.md
+- CHANGELOG_v2.8.md
+- GUI_UPDATES_v2.9.3.md
+
+### Фиксы и рефакторинг (docs/fixes/)
+- FIX_SUMMARY.md
+- GUI_NDJSON_CHECKLIST.md
+- GUI_NDJSON_FIX.md
+- REFACTORING_AUDIT.md
+- REFACTORING_COMPLETE.md
+- REFACTORING_PERSONMAPPER.md
+- REFACTORING_REPORT_v3.0.md
+- WEEKEND_LOGIC_FIX.md
+
+## Старые GUI -> archive/old_gui/
+- gui_app.py
+- gui_app_qt.py
+- gui_app_qt_new.py
+- gui_config.py
+- gui_export_logs.py
+- gui_person_manager.py
+
+## Старые тесты -> archive/old_tests/
+- test_event_merging.py
+- test_gui_ndjson.py
+- test_mapping_optional.py
+- test_melanya_mapping.py
+- test_ndjson_with_mapper.py
+
+## Старые конфиги -> archive/
+- analysis_config.py
+- demo_config.py
+- refactor.py
+- config_old/ (удалить, уже не нужна)
+
+## Временные файлы
+- examples_person_mapper.py -> archive/
+- manage_mapping.py -> tools/
+
+## Оставить в корне:
+- config.py (основной конфиг)
+- config.json (конфиг приложения)
+- main.py (CLI точка входа)
+- run_gui.py (GUI точка входа)
+- gui_app_fluent.py (текущий GUI)
+- person_mapping.json (данные)
+- requirements.txt
+- setup.py
+- README.md
+- .env, .env.example, .gitignore

@@ -38,7 +38,7 @@ class AnalysisWorker(QThread):
     error = Signal(str)
     progress = Signal(str)
     
-    def __init__(self, files, prefs, use_ai=False, prefs_file=None):
+    def  __init__(self, files, prefs, use_ai=False, prefs_file=None):
         super().__init__()
         self.files = files
         self.prefs = prefs

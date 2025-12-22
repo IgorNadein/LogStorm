@@ -1,5 +1,8 @@
 {
-  "files": [],
+  "files": [
+    "C:/Users/Игорь/Dev/LogStorm/data/vhod.ndjson",
+    "C:/Users/Игорь/Dev/LogStorm/data/vihod.ndjson"
+  ],
   "use_ai": true,
   "verbose": false,
   "prefs_file": "C:\\Users\\Игорь\\Dev\\LogStorm\\person_mapping.json",

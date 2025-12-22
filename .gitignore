@@ -50,6 +50,14 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Данные (если не хотите коммитить)
-# logs/*.csv
-# path/*.json
+# Данные (не коммитить рабочие данные)
+data/
+logs/*.ndjson
+logs/*.csv
+logs/*.log
+reports/
+
+# Сохраняем примеры
+!data/.gitkeep
+!logs/.gitkeep
+!reports/.gitkeep

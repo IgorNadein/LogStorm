@@ -11,8 +11,7 @@ from config import (
     OVERTIME_THRESHOLD,
     LATE_THRESHOLD_MINUTES,
     CRITICAL_LATE_MINUTES,
-    CRITICAL_UNDERWORK_HOURS,
-    CRITICAL_UNDERWORK_DIFF
+    CRITICAL_UNDERWORK_HOURS
 )
 
 
@@ -145,17 +144,16 @@ class StatusAnalyzer:
             LATE_THRESHOLD_MINUTES < record.late_minutes < CRITICAL_LATE_MINUTES):
             issues.append(f"Опоздание {record.late_minutes} мин")
         
-        # 3. Недоработка (не критическая)
+        # 3. Недоработка (не критическая: >= 3 часов, но < нормы)
         hours_diff = record.expected_hours - record.work_hours
-        if (record.is_underwork and 
-            hours_diff < CRITICAL_UNDERWORK_DIFF and
-            record.work_hours >= CRITICAL_UNDERWORK_HOURS):
+        is_not_critical = record.work_hours >= CRITICAL_UNDERWORK_HOURS
+        if record.is_underwork and is_not_critical:
             issues.append(f"Недоработка {hours_diff:.1f}ч")
         
         return issues
     
     @staticmethod
-    def should_count_in_summary(record: AttendanceRecord, 
+    def should_count_in_summary(record: AttendanceRecord,
                                 status_type: str) -> bool:
         """
         Определяет, нужно ли учитывать запись в итоговой статистике

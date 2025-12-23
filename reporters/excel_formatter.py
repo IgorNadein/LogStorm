@@ -244,7 +244,8 @@ class ExcelFormatter:
         
         # Форматирование итоговых строк
         summary_start = summary_start_row + 3
-        for row_idx in range(summary_start, summary_start + 6):
+        summary_count = 7  # Учтено, Неучтено, Часы, Опоздания, Уходы, Перераб, Отсутствия
+        for row_idx in range(summary_start, summary_start + summary_count):
             # Первая колонка - название итога (жирный)
             ws.cell(row_idx, 1).font = self.styles['header_font']
             ws.cell(row_idx, 1).fill = self.styles['summary_header_fill']

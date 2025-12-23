@@ -121,10 +121,6 @@ class SettingsInterface(QWidget):
         options_label = StrongBodyLabel("Опции анализа")
         options_layout.addWidget(options_label)
         
-        self.ai_check = CheckBox("Использовать AI анализ (GigaChat)", self)
-        self.ai_check.setChecked(True)
-        options_layout.addWidget(self.ai_check)
-        
         self.verbose_check = CheckBox(
             "Подробный вывод в консоль", self
         )

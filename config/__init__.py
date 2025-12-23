@@ -15,7 +15,6 @@ from .analysis import AnalysisConfig, ScheduleConfig, analysis_config
 from .formatting import FormattingConfig, formatting_config
 from .paths import PathsConfig, paths_config
 from .localization import LocalizationConfig, localization_config
-from .ai import AIConfig, ai_config
 
 
 class ConfigManager:
@@ -34,7 +33,6 @@ class ConfigManager:
         self.formatting = formatting_config
         self.paths = paths_config
         self.localization = localization_config
-        self.ai = ai_config
     
     def reload(self):
         """Перезагрузить конфигурацию из файла (для будущего использования)"""
@@ -55,7 +53,6 @@ config_manager = ConfigManager()
 LOGS_FILE = paths_config.logs_file
 PERSON_MAPPING_FILE = paths_config.person_mapping_file
 OUTPUT_EXCEL_FILE = paths_config.output_excel_file
-OUTPUT_AI_SUMMARY_FILE = paths_config.output_ai_summary_file
 
 # === РАБОЧИЙ ГРАФИК ===
 DEFAULT_WORK_HOURS = analysis_config.default_work_hours
@@ -74,7 +71,6 @@ OVERTIME_THRESHOLD = analysis_config.overtime_threshold
 LATE_THRESHOLD_MINUTES = analysis_config.late_threshold_minutes
 CRITICAL_LATE_MINUTES = analysis_config.critical_late_minutes
 CRITICAL_UNDERWORK_HOURS = analysis_config.critical_underwork_hours
-CRITICAL_UNDERWORK_DIFF = analysis_config.critical_underwork_diff
 MASS_ABSENCE_THRESHOLD = analysis_config.mass_absence_threshold
 CRITICAL_ABSENCE_THRESHOLD = analysis_config.critical_absence_threshold
 
@@ -103,10 +99,6 @@ SHEET_MONTH_PREFIX = formatting_config.sheet_month_prefix
 TOP_N_USERS = analysis_config.top_n_users
 MAX_SUSPICIOUS_DETAILS = analysis_config.max_suspicious_details
 
-# === AI АНАЛИЗ ===
-GIGACHAT_SCOPE = ai_config.gigachat_scope
-AI_PROMPT_SENTENCES = ai_config.ai_prompt_sentences
-
 # === НАЗВАНИЯ ДЛЯ ОТЧЕТОВ ===
 DAYS_RU = localization_config.days_ru
 DAYS_ORDER = localization_config.days_order
@@ -121,14 +113,12 @@ __all__ = [
     'FormattingConfig',
     'PathsConfig',
     'LocalizationConfig',
-    'AIConfig',
     'ScheduleConfig',
     
     # Обратная совместимость - пути
     'LOGS_FILE',
     'PERSON_MAPPING_FILE',
     'OUTPUT_EXCEL_FILE',
-    'OUTPUT_AI_SUMMARY_FILE',
     
     # Обратная совместимость - график
     'DEFAULT_WORK_HOURS',
@@ -141,7 +131,6 @@ __all__ = [
     'LATE_THRESHOLD_MINUTES',
     'CRITICAL_LATE_MINUTES',
     'CRITICAL_UNDERWORK_HOURS',
-    'CRITICAL_UNDERWORK_DIFF',
     'MASS_ABSENCE_THRESHOLD',
     'CRITICAL_ABSENCE_THRESHOLD',
     
@@ -167,10 +156,6 @@ __all__ = [
     # Обратная совместимость - статистика
     'TOP_N_USERS',
     'MAX_SUSPICIOUS_DETAILS',
-    
-    # Обратная совместимость - AI
-    'GIGACHAT_SCOPE',
-    'AI_PROMPT_SENTENCES',
     
     # Обратная совместимость - локализация
     'DAYS_RU',

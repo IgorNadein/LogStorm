@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Export Hikvision/HiWatch AccessControl events via ISAPI:
-  POST /ISAPI/AccessControl/AcsEvent?format=json
+Export Hikvision/HiWatch AccessControl events via ISAPI.
 
-Designed for face/access terminals that:
-  - require "minor" parameter
-  - cap maxResults to 30
-  - may return multipart/mixed (JSON + JPEG) when picEnable=true
+Единый скрипт экспорта событий СКУД с поддержкой:
+  - Экспорт за один период
+  - Экспорт с разбиением на части (--chunk-days)
+  - Защита от перезаписи файлов
+  - Дедупликация событий
+  - Продолжение прерванного экспорта
 
-Output:
-  - NDJSON file: one event per line (dict)
-  - Optional: save JPEG parts (if multipart) to --img-dir
+Примеры:
+  # Простой экспорт
+  python export_events.py --password CHANGE_ME --end 2025-12-31T23:59:59
+
+  # Экспорт большого периода с разбиением по 30 дней
+  python export_events.py --password CHANGE_ME \\
+    --start 2024-01-01 --end 2024-12-31 --chunk-days 30
 
 Dependencies:
   pip install requests requests-toolbelt
@@ -23,8 +27,10 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+import hashlib
+from datetime import datetime, timedelta
 from functools import wraps
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import requests
 from requests.auth import HTTPDigestAuth
@@ -36,58 +42,161 @@ except Exception:  # pragma: no cover
     MultipartDecoder = None  # type: ignore
 
 
-# === ПРОФИЛИРОВАНИЕ ВРЕМЕНИ ===
-_timing_stats = {}
+# ============================================================================
+# УТИЛИТЫ
+# ============================================================================
+
+_timing_stats: Dict[str, Dict[str, Any]] = {}
 
 
 def timeit(func):
-    """Декоратор для замера времени выполнения функции"""
+    """Декоратор для замера времени выполнения"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        func_name = func.__name__
         start = time.perf_counter()
         try:
-            result = func(*args, **kwargs)
-            return result
+            return func(*args, **kwargs)
         finally:
             elapsed = time.perf_counter() - start
-            if func_name not in _timing_stats:
-                _timing_stats[func_name] = {'calls': 0, 'total': 0.0, 'min': float('inf'), 'max': 0.0}
-            
-            stats = _timing_stats[func_name]
-            stats['calls'] += 1
-            stats['total'] += elapsed
-            stats['min'] = min(stats['min'], elapsed)
-            stats['max'] = max(stats['max'], elapsed)
-    
+            name = func.__name__
+            if name not in _timing_stats:
+                _timing_stats[name] = {
+                    'calls': 0, 'total': 0.0,
+                    'min': float('inf'), 'max': 0.0
+                }
+            s = _timing_stats[name]
+            s['calls'] += 1
+            s['total'] += elapsed
+            s['min'] = min(s['min'], elapsed)
+            s['max'] = max(s['max'], elapsed)
     return wrapper
 
 
-def print_timing_stats():
-    """Вывод статистики времени выполнения"""
+def print_timing_stats() -> None:
+    """Вывод статистики времени"""
     if not _timing_stats:
         return
-    
-    print("\n" + "=" * 80)
-    print("⏱️  СТАТИСТИКА ВРЕМЕНИ ВЫПОЛНЕНИЯ")
-    print("=" * 80)
-    print(f"{'Функция':<30} {'Вызовов':<10} {'Всего (сек)':<15} {'Среднее':<12} {'Мин':<10} {'Макс':<10}")
-    print("-" * 80)
-    
-    for func_name, stats in sorted(_timing_stats.items(), key=lambda x: x[1]['total'], reverse=True):
-        avg = stats['total'] / stats['calls'] if stats['calls'] > 0 else 0
-        print(f"{func_name:<30} {stats['calls']:<10} {stats['total']:<15.3f} {avg:<12.3f} {stats['min']:<10.3f} {stats['max']:<10.3f}")
-    
-    total_time = sum(s['total'] for s in _timing_stats.values())
-    print("-" * 80)
-    print(f"{'ИТОГО':<30} {'':<10} {total_time:<15.3f}")
-    print("=" * 80)
-# === КОНЕЦ ПРОФИЛИРОВАНИЯ ===
+    print("\n" + "=" * 70)
+    print("⏱️  СТАТИСТИКА ВРЕМЕНИ")
+    print("=" * 70)
+    for name, s in sorted(_timing_stats.items(), 
+                          key=lambda x: x[1]['total'], reverse=True):
+        avg = s['total'] / s['calls'] if s['calls'] else 0
+        print(f"{name:<25} {s['calls']:>5} вызовов, "
+              f"{s['total']:>8.2f}с всего, {avg:.3f}с среднее")
 
+
+def ensure_dir(path: str) -> None:
+    """Создание директории"""
+    if path:
+        os.makedirs(path, exist_ok=True)
+
+
+def get_safe_filepath(filepath: str, force: bool = False) -> str:
+    """Получить безопасный путь (без перезаписи существующего)"""
+    if force or not os.path.exists(filepath):
+        return filepath
+    
+    base, ext = os.path.splitext(filepath)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    new_path = f"{base}_{ts}{ext}"
+    
+    counter = 1
+    while os.path.exists(new_path):
+        new_path = f"{base}_{ts}_{counter}{ext}"
+        counter += 1
+    
+    print(f"⚠️  Файл существует, используем: {new_path}")
+    return new_path
+
+
+def backup_file(filepath: str) -> Optional[str]:
+    """Создать резервную копию файла"""
+    if not os.path.exists(filepath):
+        return None
+    
+    import shutil
+    backup = f"{filepath}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    shutil.copy2(filepath, backup)
+    print(f"📦 Резервная копия: {backup}")
+    return backup
+
+
+# ============================================================================
+# ДЕДУПЛИКАЦИЯ
+# ============================================================================
+
+class Deduplicator:
+    """Дедупликация событий по serialNo"""
+    
+    def __init__(self):
+        self._serials: Set[int] = set()
+        self._hashes: Set[str] = set()
+        self.duplicates = 0
+        self.processed = 0
+    
+    def is_duplicate(self, event: Dict[str, Any]) -> bool:
+        """Проверка дубликата"""
+        self.processed += 1
+        
+        serial = event.get('serialNo')
+        if isinstance(serial, int):
+            if serial in self._serials:
+                self.duplicates += 1
+                return True
+            self._serials.add(serial)
+            return False
+        
+        # Fallback на хэш
+        h = hashlib.md5(
+            json.dumps(event, sort_keys=True).encode()
+        ).hexdigest()
+        if h in self._hashes:
+            self.duplicates += 1
+            return True
+        self._hashes.add(h)
+        return False
+    
+    def load_from_file(self, filepath: str) -> int:
+        """Загрузить существующие события"""
+        if not os.path.exists(filepath):
+            return 0
+        
+        count = 0
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    serial = event.get('serialNo')
+                    if isinstance(serial, int):
+                        self._serials.add(serial)
+                    count += 1
+                except json.JSONDecodeError:
+                    pass
+        return count
+    
+    def get_max_serial(self) -> Optional[int]:
+        """Получить максимальный serialNo"""
+        return max(self._serials) if self._serials else None
+    
+    def print_stats(self) -> None:
+        """Вывод статистики"""
+        if self.duplicates > 0:
+            pct = (self.duplicates / self.processed * 100) if self.processed else 0
+            print(f"📊 Дедупликация: {self.duplicates} дубликатов "
+                  f"из {self.processed} ({pct:.1f}%)")
+
+
+# ============================================================================
+# ISAPI КЛИЕНТ
+# ============================================================================
 
 @timeit
 def extract_events(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return AcsEvent.InfoList (list of event dicts)."""
+    """Извлечь события из ответа"""
     acs = payload.get("AcsEvent")
     if isinstance(acs, dict):
         info = acs.get("InfoList")
@@ -96,113 +205,96 @@ def extract_events(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-@timeit
 def is_device_error(payload: Dict[str, Any]) -> bool:
-    """Hikvision-style JSON_ResponseStatus usually contains statusCode/statusString."""
-    return isinstance(payload, dict) and "statusCode" in payload and "statusString" in payload
-
-
-def ensure_dir(path: str) -> None:
-    if path:
-        os.makedirs(path, exist_ok=True)
+    """Проверка ошибки устройства"""
+    return (isinstance(payload, dict) and 
+            "statusCode" in payload and "statusString" in payload)
 
 
 @timeit
-def parse_json_or_multipart(
+def parse_response(
     resp: requests.Response,
     save_images: bool,
     img_dir: Optional[str],
     img_prefix: str,
 ) -> Tuple[Dict[str, Any], List[str]]:
-    """
-    Returns (payload_json, saved_image_paths).
-    If Content-Type is multipart/mixed, extract JSON part and optionally save JPEG parts.
-    """
+    """Парсинг ответа (JSON или multipart)"""
     ct = (resp.headers.get("Content-Type") or "").lower()
     saved: List[str] = []
 
     if "multipart" in ct:
         if MultipartDecoder is None:
             raise RuntimeError(
-                "Device returned multipart response but requests-toolbelt is not installed. "
+                "Multipart response requires requests-toolbelt. "
                 "Install: pip install requests-toolbelt"
             )
 
-        dec = MultipartDecoder(resp.content, resp.headers.get("Content-Type", ""))
+        dec = MultipartDecoder(resp.content, 
+                               resp.headers.get("Content-Type", ""))
 
         json_part = None
         for part in dec.parts:
-            pct = part.headers.get(b"Content-Type", b"").decode(errors="ignore").lower()
+            pct = part.headers.get(b"Content-Type", b"").decode().lower()
             if "application/json" in pct:
                 json_part = part
                 break
 
         if json_part is None:
-            # some devices put JSON without explicit application/json; fallback to first part as text
-            first = dec.parts[0].content.decode("utf-8", "ignore") if dec.parts else ""
-            raise RuntimeError(f"Multipart response without JSON part. First part: {first[:300]}")
+            raise RuntimeError("Multipart without JSON part")
 
         payload = json.loads(json_part.content.decode("utf-8", "ignore"))
 
         if save_images and img_dir:
             ensure_dir(img_dir)
-            idx = 0
-            for part in dec.parts:
-                pct = part.headers.get(b"Content-Type", b"").decode(errors="ignore").lower()
-                if "image/jpeg" in pct or "image/jpg" in pct:
-                    fname = f"{img_prefix}_img{idx}.jpg"
-                    fpath = os.path.join(img_dir, fname)
+            for idx, part in enumerate(dec.parts):
+                pct = part.headers.get(b"Content-Type", b"").decode().lower()
+                if "image/jpeg" in pct:
+                    fpath = os.path.join(img_dir, f"{img_prefix}_{idx}.jpg")
                     with open(fpath, "wb") as f:
                         f.write(part.content)
                     saved.append(fpath)
-                    idx += 1
 
         return payload, saved
 
-    # non-multipart: expect JSON
-    # some devices may still return XML on error (e.g., <userCheck/>)
     if "json" not in ct:
-        body = resp.text[:500]
-        raise RuntimeError(f"Non-JSON response (Content-Type={ct}). Body: {body}")
+        raise RuntimeError(f"Non-JSON response: {resp.text[:300]}")
 
     return resp.json(), saved
 
 
 @timeit
-def post_acs_event(
+def fetch_events(
     session: requests.Session,
     base_url: str,
     auth: HTTPDigestAuth,
     cond: Dict[str, Any],
-    timeout_s: int,
+    timeout: int,
     retries: int,
-    backoff_s: float,
     save_images: bool,
     img_dir: Optional[str],
     img_prefix: str,
 ) -> Tuple[Dict[str, Any], List[str], requests.Session]:
-    """
-    POST AcsEvent with retries. Returns (payload_json, saved_image_paths, session).
-    Important: we return session because we may recreate it on failures.
-    """
+    """Запрос событий с повторами"""
     url = f"{base_url}/ISAPI/AccessControl/AcsEvent?format=json"
-    timeout = (5, timeout_s)  # (connect, read)
-
-    last_err: Optional[Exception] = None
-
+    
+    last_err = None
     for attempt in range(1, retries + 1):
         try:
-            resp = session.post(url, auth=auth, json={"AcsEventCond": cond}, timeout=timeout)
-
-            if resp.status_code == 401:
-                raise RuntimeError(f"Unauthorized (401). Body: {resp.text[:200]}")
-            if resp.status_code >= 400:
-                raise RuntimeError(f"HTTP {resp.status_code}. Body: {resp.text[:300]}")
-
-            payload, saved = parse_json_or_multipart(
-                resp, save_images=save_images, img_dir=img_dir, img_prefix=img_prefix
+            resp = session.post(
+                url, auth=auth,
+                json={"AcsEventCond": cond},
+                timeout=(5, timeout)
             )
+            
+            if resp.status_code == 401:
+                raise RuntimeError(f"Unauthorized (401)")
+            if resp.status_code >= 400:
+                raise RuntimeError(f"HTTP {resp.status_code}")
 
+            payload, saved = parse_response(
+                resp, save_images, img_dir, img_prefix
+            )
+            
             if is_device_error(payload):
                 raise RuntimeError(f"Device error: {payload}")
 
@@ -210,164 +302,313 @@ def post_acs_event(
 
         except (ReadTimeout, ConnectionError) as e:
             last_err = e
-            time.sleep(backoff_s * attempt)
-
-            # recreate session (return it to caller!)
-            try:
-                session.close()
-            except Exception:
-                pass
-
+            time.sleep(attempt)
+            session.close()
             session = requests.Session()
-            session.headers.update({"Accept": "application/json", "Connection": "close"})
+            session.headers.update({"Accept": "application/json"})
             continue
 
-        except Exception as e:
-            # For non-transient problems (badJsonContent, bad parameters, etc.) don't spam retries.
-            raise
-
-    raise RuntimeError(f"Failed after {retries} retries. Last error: {last_err!r}")
+    raise RuntimeError(f"Failed after {retries} retries: {last_err}")
 
 
-def main() -> None:
-    p = argparse.ArgumentParser(description="Export ACT-T1342EW access events (ISAPI AcsEvent) to NDJSON.")
-    p.add_argument("--host", default="192.168.1.101")
-    p.add_argument("--user", default="admin")
-    p.add_argument("--password", required=True)
+# ============================================================================
+# ЭКСПОРТЕР
+# ============================================================================
 
-    p.add_argument("--out", default="events.ndjson")
-    p.add_argument("--verbose", action="store_true", help="Подробный вывод времени каждого запроса")
-
-    # For your device: local format without timezone in request is accepted,
-    # while response may include +03:00.
-    p.add_argument("--start", default="2000-01-01T00:00:00")
-    p.add_argument("--end", required=True, help="ISO8601 local, e.g. 2025-12-15T23:59:59")
-
-    p.add_argument("--page", type=int, default=30, help="maxResults (device max often 30)")
-    p.add_argument("--timeout", type=int, default=180, help="read timeout seconds")
-    p.add_argument("--sleep", type=float, default=0.0)
-
-    # On your firmware minor is required; use 0 for 'all minors within major'
-    p.add_argument("--major", type=int, default=5)
-    p.add_argument("--minor", type=int, default=0)
-
-    # Export mode: serial-based paging (recommended)
-    p.add_argument("--begin-serial", type=int, default=1)
-    p.add_argument("--end-serial", type=int, default=3000000000)
-
-    # Pictures:
-    p.add_argument("--pic", action="store_true", help="Enable picEnable=true and parse multipart response")
-    p.add_argument("--img-dir", default="event_images", help="Directory to save JPEG parts when --pic")
-    p.add_argument("--no-save-images", action="store_true", help="If set with --pic, parse JSON but do not save JPEGs")
-
-    # Retry behavior:
-    p.add_argument("--retries", type=int, default=5)
-    p.add_argument("--backoff", type=float, default=1.0)
-
-    args = p.parse_args()
-
-    base_url = f"http://{args.host}"
-    auth = HTTPDigestAuth(args.user, args.password)
-
-    session = requests.Session()
-    session.headers.update({"Accept": "application/json", "Connection": "close"})
-
-    next_serial = int(args.begin_serial)
-    total = 0
-
-    # if --pic but user doesn't want files
-    save_images = bool(args.pic) and not bool(args.no_save_images)
-    img_dir = args.img_dir if save_images else None
-
-    # Clear output file
-    with open(args.out, "w", encoding="utf-8") as f:
-        iteration = 0
+class EventExporter:
+    """Экспортер событий СКУД"""
+    
+    def __init__(self, args: argparse.Namespace):
+        self.args = args
+        self.session: Optional[requests.Session] = None
+        self.auth: Optional[HTTPDigestAuth] = None
+        self.dedup: Optional[Deduplicator] = None
+        
+        self.total_exported = 0
+        self.output_path = ""
+    
+    def setup(self) -> None:
+        """Инициализация"""
+        self.session = requests.Session()
+        self.session.headers.update({"Accept": "application/json"})
+        self.auth = HTTPDigestAuth(self.args.user, self.args.password)
+        
+        # Определение выходного файла
+        if self.args.append and os.path.exists(self.args.out):
+            self.output_path = self.args.out
+            print(f"📎 Дополнение: {self.output_path}")
+        else:
+            self.output_path = get_safe_filepath(
+                self.args.out, self.args.force
+            )
+        
+        # Резервная копия
+        if self.args.backup and os.path.exists(self.output_path):
+            backup_file(self.output_path)
+        
+        # Дедупликация
+        if self.args.deduplicate or self.args.append or self.args.resume:
+            self.dedup = Deduplicator()
+            if os.path.exists(self.output_path):
+                loaded = self.dedup.load_from_file(self.output_path)
+                if loaded:
+                    print(f"📊 Загружено {loaded} событий для дедупликации")
+    
+    def get_start_serial(self) -> int:
+        """Начальный serialNo"""
+        if self.args.resume and self.dedup:
+            last = self.dedup.get_max_serial()
+            if last:
+                print(f"▶️  Продолжение с serialNo: {last + 1}")
+                return last + 1
+        return self.args.begin_serial
+    
+    def export_period(
+        self, 
+        start_time: str, 
+        end_time: str,
+        file_handle
+    ) -> int:
+        """Экспорт одного периода"""
+        base_url = f"http://{self.args.host}"
+        save_images = self.args.pic and not self.args.no_save_images
+        img_dir = self.args.img_dir if save_images else None
+        
+        next_serial = self.get_start_serial()
+        period_exported = 0
+        
         while True:
-            iteration += 1
-            iteration_start = time.perf_counter()
-            
-            cond: Dict[str, Any] = {
-                "searchID": "export-all-serial",
+            cond = {
+                "searchID": "export",
                 "searchResultPosition": 0,
-                "maxResults": int(args.page),
-                "major": int(args.major),
-                "minor": int(args.minor),
-                "startTime": args.start,
-                "endTime": args.end,
-                "picEnable": bool(args.pic),
+                "maxResults": self.args.page,
+                "major": self.args.major,
+                "minor": self.args.minor,
+                "startTime": start_time,
+                "endTime": end_time,
+                "picEnable": self.args.pic,
                 "timeReverseOrder": False,
                 "beginSerialNo": next_serial,
-                "endSerialNo": int(args.end_serial),
+                "endSerialNo": self.args.end_serial,
             }
-
-            img_prefix = f"serial_{next_serial}"
-
-            request_start = time.perf_counter()
-            payload, saved_imgs, session = post_acs_event(
-                session=session,
-                base_url=base_url,
-                auth=auth,
-                cond=cond,
-                timeout_s=int(args.timeout),
-                retries=int(args.retries),
-                backoff_s=float(args.backoff),
-                save_images=save_images,
-                img_dir=img_dir,
-                img_prefix=img_prefix,
+            
+            payload, _, self.session = fetch_events(
+                self.session, base_url, self.auth, cond,
+                self.args.timeout, self.args.retries,
+                save_images, img_dir, f"s{next_serial}"
             )
-            request_elapsed = time.perf_counter() - request_start
-
+            
             events = extract_events(payload)
             if not events:
                 break
-
-            max_sn: Optional[int] = None
+            
+            max_sn = None
             for e in events:
-                # attach saved images list only to the first event of this batch (optional),
-                # or you can attach to each event if you prefer.
-                if saved_imgs:
-                    e = dict(e)  # shallow copy
-                    e["_savedImages"] = saved_imgs
-
-                f.write(json.dumps(e, ensure_ascii=False) + "\n")
-                total += 1
-
+                if self.dedup and self.dedup.is_duplicate(e):
+                    continue
+                
+                file_handle.write(json.dumps(e, ensure_ascii=False) + "\n")
+                self.total_exported += 1
+                period_exported += 1
+                
                 sn = e.get("serialNo")
                 if isinstance(sn, int):
                     max_sn = sn if max_sn is None else max(max_sn, sn)
-
+            
             if max_sn is None:
-                raise RuntimeError("No serialNo in returned events; cannot continue serial paging.")
-
+                break
+            
             next_serial = max_sn + 1
             
-            iteration_elapsed = time.perf_counter() - iteration_start
-
-            if args.verbose:
-                sys.stderr.write(f"\rИтерация {iteration}: запрос={request_elapsed:.2f}с, итого={iteration_elapsed:.2f}с, событий={len(events)}, всего={total}")
-            else:
-                sys.stderr.write(f"\rExported: {total}  (next_serial={next_serial})")
+            sys.stderr.write(f"\r  Экспортировано: {period_exported}")
             sys.stderr.flush()
-
-            if len(events) < int(args.page):
+            
+            if len(events) < self.args.page:
                 break
-
-            if args.sleep > 0:
-                time.sleep(float(args.sleep))
-
-    sys.stderr.write("\n")
-    print(f"OK: wrote {total} events to {args.out}")
-    if args.pic:
-        print("Note: --pic enabled. If device returns multipart, JSON is extracted; JPEG parts saved if not --no-save-images.")
+            
+            if self.args.sleep > 0:
+                time.sleep(self.args.sleep)
+        
+        sys.stderr.write("\n")
+        return period_exported
     
-    # Вывод статистики времени
-    print_timing_stats()
+    def run(self) -> int:
+        """Запуск экспорта"""
+        self.setup()
+        
+        mode = "a" if self.args.append else "w"
+        
+        # Определяем периоды
+        if self.args.chunk_days and self.args.chunk_days > 0:
+            periods = self._calculate_chunks()
+            print(f"📅 Разбиение на {len(periods)} периодов "
+                  f"по {self.args.chunk_days} дней")
+        else:
+            periods = [(self.args.start, self.args.end)]
+        
+        with open(self.output_path, mode, encoding="utf-8") as f:
+            for i, (start, end) in enumerate(periods, 1):
+                if len(periods) > 1:
+                    print(f"\n[{i}/{len(periods)}] {start[:10]} → {end[:10]}")
+                
+                exported = self.export_period(start, end, f)
+                
+                if len(periods) > 1:
+                    print(f"  ✅ {exported} событий")
+        
+        self._print_summary()
+        return self.total_exported
+    
+    def _calculate_chunks(self) -> List[Tuple[str, str]]:
+        """Разбиение периода на части"""
+        # Парсим даты
+        start_str = self.args.start
+        end_str = self.args.end
+        
+        # Убираем время если есть
+        if 'T' in start_str:
+            start_date = datetime.fromisoformat(start_str.replace('Z', ''))
+        else:
+            start_date = datetime.strptime(start_str, "%Y-%m-%d")
+        
+        if 'T' in end_str:
+            end_date = datetime.fromisoformat(end_str.replace('Z', ''))
+        else:
+            end_date = datetime.strptime(end_str, "%Y-%m-%d")
+            end_date = end_date.replace(hour=23, minute=59, second=59)
+        
+        chunks = []
+        current = start_date
+        
+        while current < end_date:
+            chunk_end = min(
+                current + timedelta(days=self.args.chunk_days),
+                end_date
+            )
+            chunks.append((
+                current.strftime("%Y-%m-%dT%H:%M:%S"),
+                chunk_end.strftime("%Y-%m-%dT%H:%M:%S")
+            ))
+            current = chunk_end
+        
+        return chunks
+    
+    def _print_summary(self) -> None:
+        """Вывод итогов"""
+        print(f"\n✅ Экспортировано: {self.total_exported} событий")
+        print(f"   Файл: {self.output_path}")
+        
+        if self.dedup:
+            self.dedup.print_stats()
+        
+        if self.args.verbose:
+            print_timing_stats()
+
+
+# ============================================================================
+# CLI
+# ============================================================================
+
+def create_parser() -> argparse.ArgumentParser:
+    """Создание парсера аргументов"""
+    p = argparse.ArgumentParser(
+        description="Экспорт событий СКУД Hikvision/HiWatch в NDJSON",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Примеры:
+  # Базовый экспорт
+  python export_events.py --password CHANGE_ME --end 2025-12-31T23:59:59
+
+  # С разбиением на периоды по 30 дней
+  python export_events.py --password CHANGE_ME \\
+    --start 2024-01-01 --end 2024-12-31 --chunk-days 30
+
+  # Дополнение существующего файла
+  python export_events.py --password CHANGE_ME --end 2025-12-31T23:59:59 --append
+
+  # Продолжение прерванного экспорта
+  python export_events.py --password CHANGE_ME --end 2025-12-31T23:59:59 --resume
+        """
+    )
+    
+    # Подключение
+    g = p.add_argument_group('Подключение')
+    g.add_argument("--host", default="192.168.1.101")
+    g.add_argument("--user", default="admin")
+    g.add_argument("--password", required=True)
+    
+    # Период
+    g = p.add_argument_group('Период')
+    g.add_argument("--start", default="2000-01-01T00:00:00",
+                   help="Начало (ISO8601 или YYYY-MM-DD)")
+    g.add_argument("--end", required=True,
+                   help="Конец (ISO8601 или YYYY-MM-DD)")
+    g.add_argument("--chunk-days", type=int, default=0,
+                   help="Разбить на периоды по N дней (0 = без разбиения)")
+    
+    # Выход
+    g = p.add_argument_group('Выходной файл')
+    g.add_argument("--out", default="events.ndjson")
+    g.add_argument("--force", action="store_true",
+                   help="Перезаписать существующий")
+    g.add_argument("--append", action="store_true",
+                   help="Дополнить существующий")
+    g.add_argument("--backup", action="store_true",
+                   help="Создать резервную копию")
+    
+    # Дедупликация
+    g = p.add_argument_group('Дедупликация')
+    g.add_argument("--deduplicate", action="store_true",
+                   help="Фильтровать дубликаты")
+    g.add_argument("--resume", action="store_true",
+                   help="Продолжить с последнего serialNo")
+    
+    # Запрос
+    g = p.add_argument_group('Параметры запроса')
+    g.add_argument("--page", type=int, default=30)
+    g.add_argument("--major", type=int, default=5)
+    g.add_argument("--minor", type=int, default=0)
+    g.add_argument("--begin-serial", type=int, default=1)
+    g.add_argument("--end-serial", type=int, default=3000000000)
+    
+    # Изображения
+    g = p.add_argument_group('Изображения')
+    g.add_argument("--pic", action="store_true")
+    g.add_argument("--img-dir", default="event_images")
+    g.add_argument("--no-save-images", action="store_true")
+    
+    # Сеть
+    g = p.add_argument_group('Сеть')
+    g.add_argument("--timeout", type=int, default=180)
+    g.add_argument("--retries", type=int, default=5)
+    g.add_argument("--sleep", type=float, default=0.0)
+    
+    # Отладка
+    g.add_argument("--verbose", "-v", action="store_true")
+    
+    return p
+
+
+def main() -> None:
+    """Точка входа"""
+    args = create_parser().parse_args()
+    
+    # Валидация
+    if args.append and args.force:
+        print("⚠️  --append и --force несовместимы, используем --append")
+        args.force = False
+    
+    exporter = EventExporter(args)
+    start = time.perf_counter()
+    
+    try:
+        exporter.run()
+    except KeyboardInterrupt:
+        print(f"\n\n⚠️ Прервано. Экспортировано: {exporter.total_exported}")
+    finally:
+        elapsed = time.perf_counter() - start
+        print(f"\n⏱️  Время: {elapsed:.1f}с")
 
 
 if __name__ == "__main__":
-    script_start = time.perf_counter()
-    try:
-        main()
-    finally:
-        script_elapsed = time.perf_counter() - script_start
-        print(f"\n⏱️  Общее время выполнения скрипта: {script_elapsed:.2f} секунд")
+    main()

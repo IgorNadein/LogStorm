@@ -11,7 +11,6 @@ import pandas as pd
 from config import (
     CRITICAL_LATE_MINUTES,
     CRITICAL_UNDERWORK_HOURS,
-    CRITICAL_UNDERWORK_DIFF,
     NIGHT_HOUR_START,
     NIGHT_HOUR_END
 )
@@ -76,19 +75,13 @@ class TimeValidator:
         """
         Проверяет, является ли недоработка критической
 
-        Критическая недоработка:
-        1. Отработано менее 7 часов (<CRITICAL_UNDERWORK_HOURS)
-        2. На 2+ часа меньше нормы (>=CRITICAL_UNDERWORK_DIFF)
+        Критическая недоработка: отработано менее N часов
 
         Args:
             work_hours: Фактически отработанные часы
-            expected_hours: Ожидаемые часы по графику
+            expected_hours: Ожидаемые часы по графику (не используется)
 
         Returns:
             True если недоработка критическая
         """
-        hours_diff = expected_hours - work_hours
-        return (
-            work_hours < CRITICAL_UNDERWORK_HOURS or
-            hours_diff >= CRITICAL_UNDERWORK_DIFF
-        )
+        return work_hours < CRITICAL_UNDERWORK_HOURS

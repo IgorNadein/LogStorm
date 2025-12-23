@@ -61,3 +61,9 @@ reports/
 !data/.gitkeep
 !logs/.gitkeep
 !reports/.gitkeep
+
+# Collector (конфиг с паролями)
+collector/collector.json
+collector/collector.log
+collector/collector_state.json
+collector/__pycache__/

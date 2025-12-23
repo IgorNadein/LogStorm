@@ -7,7 +7,6 @@ from PySide6.QtCore import QThread, Signal
 
 from services.data_loader import DataLoader
 from services.attendance_service import AttendanceService
-from services.ai_service import AIService
 from services.person_mapper import PersonMapper
 
 
@@ -18,20 +17,18 @@ class AnalysisWorker(QThread):
     error = Signal(str)      # Сигнал ошибки
     progress = Signal(str)   # Сигнал прогресса
     
-    def __init__(self, files, prefs, use_ai=False, prefs_file=None):
+    def __init__(self, files, prefs, prefs_file=None):
         """
         Инициализация worker
         
         Args:
             files: Список путей к файлам логов
             prefs: Словарь настроек сотрудников
-            use_ai: Использовать ли AI анализ
             prefs_file: Путь к файлу с настройками (для PersonMapper)
         """
         super().__init__()
         self.files = files
         self.prefs = prefs
-        self.use_ai = use_ai
         self.prefs_file = prefs_file
     
     def run(self):
@@ -51,15 +48,6 @@ class AnalysisWorker(QThread):
             self.progress.emit("Анализ посещаемости...")
             service = AttendanceService(df, self.prefs)
             results = service.analyze_all()
-            
-            # AI обработка если включена
-            if self.use_ai:
-                self.progress.emit("AI анализ отсутствий...")
-                try:
-                    ai_service = AIService()
-                    results = ai_service.enhance_results(results)
-                except Exception as e:
-                    print(f"AI анализ недоступен: {e}")
             
             self.progress.emit("Готово!")
             self.finished.emit(results)

@@ -162,59 +162,94 @@ class ExcelReporter:
         # Добавляем итоговые строки
         summary_rows = []
         
-        # Валидные дни
-        row_valid = {'Дата': 'Итого: Валидных дней'}
+        # Валидные РАБОЧИЕ дни (для корректного сравнения с опозданиями/уходами)
+        row_valid = {'Дата': 'Учтено(дней)'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
+            # Только рабочие дни без технических сбоев
+            valid_data = user_data[
+                (user_data['Технический сбой'] == 'Нет') &
+                (user_data['Рабочий день'] == 'Да')
+            ]
             row_valid[f"{user}_Приход"] = len(valid_data)
             row_valid[f"{user}_Уход"] = ''
         summary_rows.append(row_valid)
         
-        # Неучтенные дни
-        row_invalid = {'Дата': 'Итого: Неучтенных дней'}
+        # Неучтенные дни (рабочие дни с техсбоями)
+        row_invalid = {'Дата': 'Неучтено(дней)'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
-            row_invalid[f"{user}_Приход"] = len(user_data) - len(valid_data)
+            workdays = user_data[user_data['Рабочий день'] == 'Да']
+            invalid_count = len(workdays[workdays['Технический сбой'] != 'Нет'])
+            row_invalid[f"{user}_Приход"] = invalid_count
             row_invalid[f"{user}_Уход"] = ''
         summary_rows.append(row_invalid)
         
-        # Отработано часов
-        row_hours = {'Дата': 'Итого: Отработано часов'}
+        # Отработано часов (только рабочие дни без техсбоев)
+        row_hours = {'Дата': 'Отработано(часов)'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
-            row_hours[f"{user}_Приход"] = round(valid_data['Рабочих часов'].sum(), 2)
+            valid_data = user_data[
+                (user_data['Технический сбой'] == 'Нет') &
+                (user_data['Рабочий день'] == 'Да')
+            ]
+            total_hours = round(valid_data['Рабочих часов'].sum(), 2)
+            row_hours[f"{user}_Приход"] = total_hours
             row_hours[f"{user}_Уход"] = ''
         summary_rows.append(row_hours)
         
-        # Опоздания
-        row_late = {'Дата': 'Итого: Опозданий'}
+        # Опоздания (только рабочие дни без техсбоев)
+        row_late = {'Дата': 'Опозданий'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
-            row_late[f"{user}_Приход"] = len(valid_data[valid_data['Опоздание'] == 'Да'])
+            valid_data = user_data[
+                (user_data['Технический сбой'] == 'Нет') &
+                (user_data['Рабочий день'] == 'Да')
+            ]
+            late_count = len(valid_data[valid_data['Опоздание'] == 'Да'])
+            row_late[f"{user}_Приход"] = late_count
             row_late[f"{user}_Уход"] = ''
         summary_rows.append(row_late)
         
-        # Ранние уходы
-        row_early = {'Дата': 'Итого: Ранних уходов'}
+        # Ранние уходы (рабочие дни без техсбоев)
+        row_early = {'Дата': 'Ранних уходов'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
-            row_early[f"{user}_Приход"] = len(valid_data[valid_data['Ранний уход'] == 'Да'])
+            valid_data = user_data[
+                (user_data['Технический сбой'] == 'Нет') &
+                (user_data['Рабочий день'] == 'Да')
+            ]
+            early_count = len(valid_data[valid_data['Ранний уход'] == 'Да'])
+            row_early[f"{user}_Приход"] = early_count
             row_early[f"{user}_Уход"] = ''
         summary_rows.append(row_early)
         
-        # Переработки
-        row_overtime = {'Дата': 'Итого: Переработок'}
+        # Переработки (рабочие дни без техсбоев)
+        row_overtime = {'Дата': 'Переработок'}
         for user in users:
             user_data = month_data[month_data['Имя'] == user]
-            valid_data = user_data[user_data['Технический сбой'] == 'Нет']
-            row_overtime[f"{user}_Приход"] = len(valid_data[valid_data['Переработка'] == 'Да'])
+            valid_data = user_data[
+                (user_data['Технический сбой'] == 'Нет') &
+                (user_data['Рабочий день'] == 'Да')
+            ]
+            overtime_count = len(valid_data[valid_data['Переработка'] == 'Да'])
+            row_overtime[f"{user}_Приход"] = overtime_count
             row_overtime[f"{user}_Уход"] = ''
         summary_rows.append(row_overtime)
+        
+        # Отсутствия (рабочие дни, когда сотрудник не пришёл)
+        row_absent = {'Дата': 'Отсутствий'}
+        for user in users:
+            user_data = month_data[month_data['Имя'] == user]
+            # Отсутствие = рабочий день + нет прихода (Приход == '-')
+            absent_count = len(user_data[
+                (user_data['Рабочий день'] == 'Да') &
+                (user_data['Приход'] == '-') &
+                (user_data['Технический сбой'] == 'Нет')
+            ])
+            row_absent[f"{user}_Приход"] = absent_count
+            row_absent[f"{user}_Уход"] = ''
+        summary_rows.append(row_absent)
         
         # Объединяем данные и итоги
         all_data = matrix_data + summary_rows

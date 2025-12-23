@@ -15,7 +15,7 @@ from qfluentwidgets import (
 from gui.state import AppState
 from gui.interfaces import (
     SettingsInterface, PersonsInterface, LogsInterface,
-    AnalysisInterface, ExportInterface, AboutInterface
+    AnalysisInterface, AboutInterface
 )
 from gui.dialogs import PersonDialog
 from gui.workers import AnalysisWorker
@@ -39,7 +39,6 @@ class LogStormWindow(FluentWindow):
         self.personsInterface = PersonsInterface(self)
         self.logsInterface = LogsInterface(self)
         self.analysisInterface = AnalysisInterface(self)
-        self.exportInterface = ExportInterface(self)
         self.aboutInterface = AboutInterface(self)
         
         self._init_navigation()
@@ -60,7 +59,6 @@ class LogStormWindow(FluentWindow):
             self.settingsInterface.export_edit.setText(
                 str(self.state.export_dir)
             )
-            self.settingsInterface.ai_check.setChecked(self.state.use_ai)
             self.settingsInterface.verbose_check.setChecked(
                 self.state.verbose
             )
@@ -122,8 +120,8 @@ class LogStormWindow(FluentWindow):
             self._on_run_analysis
         )
         
-        # Экспорт
-        self.exportInterface.export_btn.clicked.connect(
+        # Экспорт (кнопка на вкладке анализа)
+        self.analysisInterface.export_btn.clicked.connect(
             self._on_export
         )
     
@@ -309,8 +307,7 @@ class LogStormWindow(FluentWindow):
         ]
         
         # Сохраняем опции
-        self.state.use_ai = self.settingsInterface.ai_check.isChecked()
-        self.state.verbose = self.settingsInterface.verbose_check.isChecked()  # noqa: E501
+        self.state.verbose = self.settingsInterface.verbose_check.isChecked()
         
         # Сохраняем пути
         self.state.prefs_file = Path(
@@ -356,7 +353,6 @@ class LogStormWindow(FluentWindow):
         self.analysis_worker = AnalysisWorker(
             self.state.files,
             self.state.prefs,
-            self.state.use_ai,
             str(self.state.prefs_file)
         )
         
@@ -367,7 +363,6 @@ class LogStormWindow(FluentWindow):
         
         # Запускаем
         self.analysisInterface.set_analyzing(True)
-        self.analysisInterface.results_list.clear()
         self.analysis_worker.start()
     
     def _on_analysis_progress(self, message: str):
@@ -379,51 +374,12 @@ class LogStormWindow(FluentWindow):
         self.state.results = results
         self.analysisInterface.set_analyzing(False)
         
-        # Показываем результаты
-        self.analysisInterface.status_label.setText(
-            f"Анализ завершён! Обработано записей: {len(results)}"
-        )
-        
-        # Статистика
-        self.analysisInterface.results_list.addItem(
-            f"✓ Всего записей: {len(results)}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"✓ Файлов обработано: {len(self.state.files)}"
-        )
-        
-        # Подробная статистика
-        records_with_tech = sum(1 for r in results if r.has_technical_issues)  # noqa: E501
-        records_with_employee = sum(1 for r in results if r.has_employee_issues)  # noqa: E501
-        late_records = sum(1 for r in results if r.is_late)
-        early_leave_records = sum(1 for r in results if r.is_early_leave)
-        overtime_records = sum(1 for r in results if r.is_overtime)
-        underwork_records = sum(1 for r in results if r.is_underwork)
-        
-        self.analysisInterface.results_list.addItem("")
-        self.analysisInterface.results_list.addItem("📊 Статистика:")
-        self.analysisInterface.results_list.addItem(
-            f"  • Технические сбои: {records_with_tech}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"  • Проблемы сотрудников: {records_with_employee}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"  • Опоздания: {late_records}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"  • Ранние уходы: {early_leave_records}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"  • Переработки: {overtime_records}"
-        )
-        self.analysisInterface.results_list.addItem(
-            f"  • Недоработки: {underwork_records}"
-        )
+        # Показываем результаты в таблице с фильтрами
+        self.analysisInterface.set_results(results)
         
         InfoBar.success(
             title="Успешно",
-            content="Анализ завершён",
+            content=f"Анализ завершён: {len(results)} записей",
             parent=self,
             position=InfoBarPosition.TOP
         )
@@ -526,13 +482,6 @@ class LogStormWindow(FluentWindow):
             self.analysisInterface,
             FluentIcon.MARKET,
             'Анализ',
-            NavigationItemPosition.TOP
-        )
-        
-        self.addSubInterface(
-            self.exportInterface,
-            FluentIcon.SHARE,
-            'Экспорт',
             NavigationItemPosition.TOP
         )
         

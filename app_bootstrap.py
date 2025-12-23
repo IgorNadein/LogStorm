@@ -37,14 +37,9 @@ def create_app_container() -> ServiceContainer:
         from services.logscam_loader import LogsCamLoader
         return LogsCamLoader()
     
-    def create_ai_service(c: ServiceContainer):
-        from services.ai_service import AIService
-        return AIService()
-    
     container.register_singleton('DataLoader', create_data_loader)
     container.register_singleton('AttendanceService', create_attendance_service)
     container.register_singleton('LogsCamLoader', create_logscam_loader)
-    container.register_singleton('AIService', create_ai_service)
     
     # === Анализаторы ===
     def create_status_analyzer(c: ServiceContainer):

@@ -13,7 +13,6 @@ class AppState:
     def __init__(self):
         """Инициализация состояния"""
         self.files: List[str] = []
-        self.use_ai: bool = True
         self.verbose: bool = False
         self.df = None
         self.prefs: Dict = {}
@@ -141,7 +140,6 @@ class AppState:
                     config = json.load(f)
                 
                 self.files = config.get('files', [])
-                self.use_ai = config.get('use_ai', True)
                 self.verbose = config.get('verbose', False)
                 
                 # Проверяем путь к prefs_file
@@ -175,7 +173,6 @@ class AppState:
         try:
             config = {
                 'files': self.files,
-                'use_ai': self.use_ai,
                 'verbose': self.verbose,
                 'prefs_file': str(self.prefs_file),
                 'export_dir': str(self.export_dir)

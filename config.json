@@ -1,10 +1,8 @@
 {
   "files": [
-    "C:/Users/Игорь/Dev/LogStorm/data/vhod.ndjson",
-    "C:/Users/Игорь/Dev/LogStorm/data/vihod.ndjson"
+    "\\\\pandora\\box\\logs\\events.ndjson"
   ],
-  "use_ai": true,
-  "verbose": false,
+  "verbose": true,
   "prefs_file": "C:\\Users\\Игорь\\Dev\\LogStorm\\person_mapping.json",
   "export_dir": "reports"
 }

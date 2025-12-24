@@ -68,10 +68,10 @@ class SQLiteLoader:
             return df
         
         # Преобразование типов для совместимости с AttendanceService
-        df['time'] = pd.to_datetime(df['time'])
-        df['timestamp'] = df['time']  # Алиас для совместимости
+        df['timestamp'] = pd.to_datetime(df['time'])
         df['date'] = df['timestamp'].dt.date
-        df['time'] = df['timestamp'].dt.time  # time как time object
+        df['time_only'] = df['timestamp'].dt.time
+        df['time'] = df['time']  # Оставляем оригинальную строку времени
         
         # Применение маппинга сотрудников (если есть)
         if person_mapper:
@@ -83,9 +83,9 @@ class SQLiteLoader:
         self, df: pd.DataFrame, person_mapper
     ) -> pd.DataFrame:
         """Применение маппинга имён сотрудников"""
-        # Создаём колонку mapped_name
-        df['mapped_name'] = df.apply(
-            lambda row: self._get_mapped_name(
+        # Создаём колонки для маппинга
+        mapping_data = df.apply(
+            lambda row: self._get_mapped_data(
                 row.get('employeeNoString', ''),
                 row.get('name', ''),
                 person_mapper
@@ -93,18 +93,21 @@ class SQLiteLoader:
             axis=1
         )
         
-        # Если маппинг нашёлся, используем его вместо name
-        df['name'] = df['mapped_name'].where(
-            df['mapped_name'].notna(), df['name']
-        )
-        df.drop(columns=['mapped_name'], inplace=True)
+        # Распаковываем person_id и display_name
+        df['name'] = [data[0] for data in mapping_data]
+        df['display_name'] = [data[1] for data in mapping_data]
         
         return df
     
-    def _get_mapped_name(
+    def _get_mapped_data(
         self, employee_id: str, original_name: str, person_mapper
-    ) -> str:
-        """Получить маппированное имя сотрудника"""
+    ) -> tuple:
+        """
+        Получить маппированные person_id и display_name
+        
+        Returns:
+            (person_id, display_name)
+        """
         try:
             # Разрешаем person_id через employee_id и имя
             person_id = person_mapper.resolve_person_id(
@@ -112,12 +115,10 @@ class SQLiteLoader:
             )
             # Получаем отображаемое имя
             display_name = person_mapper.get_display_name(person_id)
-            # Возвращаем только если нашли маппинг
-            if display_name != person_id:
-                return display_name
+            return (person_id, display_name)
         except Exception:
-            pass
-        return None
+            # Если маппинг не удался - возвращаем оригинальные данные
+            return (employee_id or original_name, original_name)
     
     def get_device_list(self) -> List[str]:
         """Получить список всех устройств в БД"""

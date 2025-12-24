@@ -65,17 +65,9 @@ class PersonDialog(QDialog):
         )
         form_layout.addRow(QLabel("Начало работы:"), self.start_time_edit)
         
-        # Время окончания работы
-        self.end_time_edit = LineEdit(self)
-        self.end_time_edit.setPlaceholderText("18:00 (опционально)")
-        self.end_time_edit.setText(
-            self.person_data.get('end_time', '')
-        )
-        form_layout.addRow(QLabel("Конец работы:"), self.end_time_edit)
-        
         # Рабочие часы
         self.work_hours_edit = LineEdit(self)
-        self.work_hours_edit.setPlaceholderText("9 (опционально)")
+        self.work_hours_edit.setPlaceholderText("9")
         work_hours = self.person_data.get('work_hours')
         if work_hours:
             self.work_hours_edit.setText(str(work_hours))
@@ -144,11 +136,6 @@ class PersonDialog(QDialog):
         start_time = self.start_time_edit.text().strip()
         if start_time:
             data['start_time'] = start_time
-        
-        # Добавляем end_time если указан
-        end_time = self.end_time_edit.text().strip()
-        if end_time:
-            data['end_time'] = end_time
         
         # Добавляем work_hours если указаны
         work_hours_text = self.work_hours_edit.text().strip()

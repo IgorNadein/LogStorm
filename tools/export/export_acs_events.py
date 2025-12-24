@@ -246,12 +246,24 @@ def parse_response(
 
         if save_images and img_dir:
             ensure_dir(img_dir)
-            for idx, part in enumerate(dec.parts):
+            # Извлекаем изображения из multipart по Content-ID
+            images_by_cid: Dict[str, bytes] = {}
+            for part in dec.parts:
                 pct = part.headers.get(b"Content-Type", b"").decode().lower()
                 if "image/jpeg" in pct:
-                    fpath = os.path.join(img_dir, f"{img_prefix}_{idx}.jpg")
+                    cid = part.headers.get(b"Content-ID", b"").decode().strip("<>")
+                    if cid:
+                        images_by_cid[cid] = part.content
+            
+            # Связываем изображения с событиями по pictureURL
+            events = extract_events(payload)
+            for event in events:
+                pic_url = event.get("pictureURL", "")
+                if pic_url in images_by_cid:
+                    serial = event.get("serialNo", 0)
+                    fpath = os.path.join(img_dir, f"{img_prefix}_s{serial}.jpg")
                     with open(fpath, "wb") as f:
-                        f.write(part.content)
+                        f.write(images_by_cid[pic_url])
                     saved.append(fpath)
 
         return payload, saved
@@ -260,6 +272,24 @@ def parse_response(
         raise RuntimeError(f"Non-JSON response: {resp.text[:300]}")
 
     return resp.json(), saved
+
+
+def download_image_from_url(
+    pic_url: str,
+    auth: HTTPDigestAuth,
+    session: requests.Session,
+    timeout: int = 10
+) -> Optional[bytes]:
+    """Скачивание изображения по HTTP URL из pictureURL"""
+    try:
+        resp = session.get(pic_url, auth=auth, timeout=timeout)
+        if resp.status_code == 200:
+            ct = resp.headers.get('Content-Type', '')
+            if 'image' in ct:
+                return resp.content
+    except Exception:
+        pass
+    return None
 
 
 @timeit
@@ -401,6 +431,23 @@ class EventExporter:
             events = extract_events(payload)
             if not events:
                 break
+            
+            # Скачивание изображений из pictureURL (если не multipart)
+            if save_images and img_dir:
+                ensure_dir(img_dir)
+                for e in events:
+                    pic_url = e.get("pictureURL", "")
+                    if pic_url and pic_url.startswith("http"):
+                        img_data = download_image_from_url(
+                            pic_url, self.auth, self.session
+                        )
+                        if img_data:
+                            serial = e.get("serialNo", 0)
+                            fpath = os.path.join(
+                                img_dir, f"s{next_serial}_sn{serial}.jpg"
+                            )
+                            with open(fpath, "wb") as f:
+                                f.write(img_data)
             
             max_sn = None
             for e in events:

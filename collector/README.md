@@ -1,159 +1,68 @@
 # LogStorm Collector
 
-Фоновый сборщик событий СКУД для Windows Server.
+Автономный сборщик событий СКУД с камер Hikvision/HiWatch.
 
-## 🎯 Назначение
-
-Запускается на Windows Server в фоновом режиме и собирает события 
-с нескольких устройств Hikvision/HiWatch по расписанию в один NDJSON файл.
-
-## 🚀 Быстрый старт
-
-### 1. Настройка
+## Быстрый старт
 
 ```bash
-# Создать пример конфигурации
+# 1. Создать конфигурацию
 python collector.py --init
 
-# Отредактировать collector.json
-```
+# 2. Отредактировать collector.json (указать камеры, пути)
 
-### 2. Тестовый запуск
-
-```bash
-# Однократный сбор
+# 3. Тестовый запуск (однократный сбор)
 python collector.py --once --verbose
 
-# Запуск в консоли (для тестирования)
-python collector.py --verbose
+# 4. Запуск в режиме демона (каждые N минут)
+python collector.py
 ```
 
-### 3. Установка как Windows служба
+## Развёртывание
 
+### Linux (systemd)
+
+Создать `/etc/systemd/system/logstorm-collector.service`:
+
+```ini
+[Unit]
+Description=LogStorm Event Collector
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/path/to/LogStorm/collector
+ExecStart=/usr/bin/python3 /path/to/LogStorm/collector/collector.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Запуск:
 ```bash
-# Установить
-python collector.py install
-
-# Запустить
-python collector.py start
-
-# Остановить
-python collector.py stop
-
-# Удалить
-python collector.py remove
+sudo systemctl daemon-reload
+sudo systemctl enable logstorm-collector
+sudo systemctl start logstorm-collector
 ```
 
-## ⚙️ Конфигурация (collector.json)
+### Windows (планировщик задач)
 
-```json
-{
-  "output_file": "//SERVER/share/logstorm/events.ndjson",
-  "log_file": "collector.log",
-  "interval_minutes": 15,
-  "devices": [
-    {
-      "name": "Камера входа",
-      "host": "192.168.1.101",
-      "user": "admin",
-      "password": "YOUR_PASSWORD",
-      "enabled": true
-    },
-    {
-      "name": "Камера выхода",
-      "host": "192.168.1.102",
-      "user": "admin", 
-      "password": "YOUR_PASSWORD",
-      "enabled": true
-    }
-  ],
-  "request": {
-    "page_size": 30,
-    "timeout": 180,
-    "retries": 3,
-    "major": 5,
-    "minor": 0
-  }
-}
-```
+Создать задачу:
+- Триггер: При запуске системы
+- Действие: `python C:\LogStorm\collector\collector.py`
+- Настройки: Перезапускать при сбое
 
-### Параметры
+## Утилиты
 
-| Параметр | Описание |
-|----------|----------|
-| `output_file` | Путь к выходному файлу (UNC для сетевой папки) |
-| `log_file` | Файл логов |
-| `interval_minutes` | Интервал сбора в минутах |
-| `devices` | Массив устройств |
-| `devices[].name` | Понятное имя устройства |
-| `devices[].host` | IP-адрес |
-| `devices[].user` | Логин |
-| `devices[].password` | Пароль |
-| `devices[].enabled` | Активно ли устройство |
+- `rebuild_sqlite.py` — Восстановить SQLite из NDJSON
+- `show_state.py` — Показать состояние коллектора
+- `check_events.py` — Проверка последних событий
+- `check_fresh.py` — Проверка событий за 5 минут
+- `verify_all.py` — Полная проверка камер
 
-## 📁 Структура файлов
+## Документация
 
-```
-collector/
-├── collector.py           # Основной скрипт
-├── collector.json         # Конфигурация (создать вручную)
-├── collector.example.json # Пример конфигурации
-├── collector.log          # Лог работы (создаётся автоматически)
-├── collector_state.json   # Состояние (создаётся автоматически)
-└── README.md
-```
-
-## 🔄 Как это работает
-
-1. **Запуск** — сборщик читает конфигурацию
-2. **Для каждого устройства:**
-   - Определяет время последнего сбора (или 30 дней назад для первого запуска)
-   - Запрашивает события от этого времени до текущего
-   - Фильтрует дубликаты по `serialNo`
-   - Дописывает новые события в общий файл
-3. **Ожидание** — ждёт N минут до следующего сбора
-4. **Повтор**
-
-## 📊 Формат вывода
-
-Каждое событие дополняется метаданными:
-
-```json
-{
-  "major": 5,
-  "minor": 75,
-  "time": "2025-12-22T08:30:00+03:00",
-  "serialNo": 12345,
-  "name": "Employee Sample Employee Sample",
-  "_device": "192.168.1.101",
-  "_device_name": "Камера входа",
-  "_collected": "2025-12-22T10:15:00"
-}
-```
-
-## 🛡️ Дедупликация
-
-- Хранит `serialNo` последних 10000 событий для каждого устройства
-- Состояние сохраняется в `collector_state.json`
-- При перезапуске загружает состояние и продолжает без дубликатов
-
-## 📋 Требования
-
-```
-pip install requests requests-toolbelt pywin32
-```
-
-`pywin32` нужен только для установки как Windows службы.
-
-## 🔧 Команды
-
-| Команда | Описание |
-|---------|----------|
-| `python collector.py --init` | Создать пример конфига |
-| `python collector.py --once` | Однократный сбор |
-| `python collector.py` | Запуск в цикле |
-| `python collector.py -v` | С подробным выводом |
-| `python collector.py install` | Установить службу |
-| `python collector.py start` | Запустить службу |
-| `python collector.py stop` | Остановить службу |
-| `python collector.py remove` | Удалить службу |
+- [README_STORAGE.md](README_STORAGE.md) — Архитектура хранилища
+- [MIGRATION_SQLITE.md](MIGRATION_SQLITE.md) — Миграция на SQLite

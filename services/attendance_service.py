@@ -43,12 +43,16 @@ class AttendanceService:
             self.critical_absence_dates
         )
     
-    def analyze_all(self) -> List[AttendanceRecord]:
+    def analyze_all(self, progress_callback=None) -> List[AttendanceRecord]:
         """
         Анализ всех пользователей за все дни
         
         Создаёт запись для каждой комбинации пользователь×дата,
         определяет все статусы и проблемы.
+        
+        Args:
+            progress_callback: Опциональный callback для прогресса
+                Сигнатура: callback(current, total, user_name)
         
         Returns:
             Список всех записей посещаемости
@@ -70,10 +74,18 @@ class AttendanceService:
         # Группируем логи по пользователю и дате
         grouped = self.df.groupby(['name', 'date'])
         
-        print(f"Анализ {len(all_users)} пользователей за {len(all_dates)} дней...")
+        total_users = len(all_users)
+        print(f"Анализ {total_users} пользователей за {len(all_dates)} дней...")
         
         # Анализируем каждую комбинацию пользователь×дата
-        for user_name in all_users:
+        for user_idx, user_name in enumerate(all_users, 1):
+            # Отправляем прогресс
+            if progress_callback:
+                display_name = self.prefs.get(
+                    user_name, {}
+                ).get('display_name', user_name)
+                progress_callback(user_idx, total_users, display_name)
+            
             for date in all_dates:
                 record = self._analyze_user_day(user_name, date, grouped)
                 records.append(record)

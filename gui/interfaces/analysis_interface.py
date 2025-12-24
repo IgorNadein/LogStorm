@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QHeaderView,
     QTableWidgetItem, QAbstractItemView
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from qfluentwidgets import (
     CardWidget, PrimaryPushButton, PushButton, TableWidget,
     StrongBodyLabel, BodyLabel, IndeterminateProgressBar,
@@ -22,6 +22,25 @@ class AnalysisInterface(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("analysisInterface")
         self._all_results = []  # Все результаты для фильтрации
+        self._current_filtered = []  # Текущие отфильтрованные результаты
+        
+        # Таймер для debouncing поиска
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)  # 300 мс задержка
+        self._search_timer.timeout.connect(self._apply_filters)
+        
+        # Таймер для ленивой загрузки таблицы
+        self._populate_timer = QTimer(self)
+        self._populate_timer.setSingleShot(False)
+        self._populate_timer.setInterval(0)  # Как можно быстрее
+        self._populate_timer.timeout.connect(self._populate_batch)
+        self._populate_index = 0
+        self._populate_data = []
+        
+        # Настройки производительности
+        self.MAX_DISPLAY_ROWS = 2000  # Максимум записей в таблице
+        self.BATCH_SIZE = 100  # Размер батча для ленивой загрузки
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
@@ -38,10 +57,16 @@ class AnalysisInterface(QWidget):
         self.status_label = BodyLabel("Готов к анализу")
         control_layout.addWidget(self.status_label)
         
-        # Прогресс бар
+        # Прогресс бар (индикатор + процент)
         self.progress_bar = IndeterminateProgressBar(self)
         self.progress_bar.setVisible(False)
         control_layout.addWidget(self.progress_bar)
+        
+        # Прогресс с процентами (показывается при детальном прогрессе)
+        from qfluentwidgets import ProgressBar
+        self.detail_progress = ProgressBar(self)
+        self.detail_progress.setVisible(False)
+        control_layout.addWidget(self.detail_progress)
         
         # Кнопки в ряд
         buttons_layout = QHBoxLayout()
@@ -122,11 +147,11 @@ class AnalysisInterface(QWidget):
         
         row2.addSpacing(20)
         
-        # Поиск
+        # Поиск с debouncing
         self.search_edit = SearchLineEdit(self)
         self.search_edit.setPlaceholderText("Поиск...")
         self.search_edit.setMinimumWidth(200)
-        self.search_edit.textChanged.connect(self._apply_filters)
+        self.search_edit.textChanged.connect(self._on_search_changed)
         row2.addWidget(self.search_edit)
         
         # Кнопка сброса
@@ -167,10 +192,16 @@ class AnalysisInterface(QWidget):
         self.results_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
-        self.results_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.results_table.horizontalHeader().setStretchLastSection(True)
+        
+        # Оптимизация производительности таблицы
+        self.results_table.setAlternatingRowColors(True)
+        # Используем фиксированные размеры колонок для производительности
+        header = self.results_table.horizontalHeader()
+        header.setDefaultSectionSize(100)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        # Последняя колонка растягивается
+        header.setStretchLastSection(True)
+        
         results_layout.addWidget(self.results_table)
         
         layout.addWidget(results_card, 1)  # Растягиваем
@@ -179,11 +210,37 @@ class AnalysisInterface(QWidget):
         """Установить состояние анализа"""
         self.run_btn.setEnabled(not analyzing)
         self.progress_bar.setVisible(analyzing)
+        self.detail_progress.setVisible(False)  # Скрываем детальный прогресс
         if analyzing:
             self.progress_bar.start()
             self.status_label.setText("Выполняется анализ...")
         else:
             self.progress_bar.stop()
+    
+    def set_progress(self, current: int, total: int, message: str = ""):
+        """
+        Установить детальный прогресс анализа
+        
+        Args:
+            current: Текущий шаг
+            total: Всего шагов
+            message: Дополнительное сообщение
+        """
+        # Скрываем индикатор и показываем детальный прогресс
+        self.progress_bar.setVisible(False)
+        self.detail_progress.setVisible(True)
+        
+        # Обновляем прогресс
+        percent = int((current / total) * 100) if total > 0 else 0
+        self.detail_progress.setValue(percent)
+        
+        # Обновляем текст статуса
+        if message:
+            self.status_label.setText(f"{message} ({percent}%)")
+        else:
+            self.status_label.setText(
+                f"Анализ: {current}/{total} ({percent}%)"
+            )
     
     def set_results(self, records: list):
         """
@@ -222,6 +279,15 @@ class AnalysisInterface(QWidget):
         self.status_label.setText(
             f"Анализ завершён. Найдено записей: {len(records)}"
         )
+    
+    def _on_search_changed(self):
+        """Обработка изменения поискового запроса с debouncing"""
+        # Останавливаем предыдущий таймер
+        self._search_timer.stop()
+        # Останавливаем загрузку таблицы если идёт
+        self._populate_timer.stop()
+        # Запускаем новый таймер (сработает через 300 мс)
+        self._search_timer.start()
     
     def _apply_filters(self):
         """Применить фильтры к результатам"""
@@ -276,25 +342,83 @@ class AnalysisInterface(QWidget):
                 or search_text in str(r.date)
             ]
         
-        # Обновляем таблицу
-        self._populate_table(filtered)
+        # Сохраняем отфильтрованные результаты
+        self._current_filtered = filtered
         
-        # Обновляем счётчик
-        self.count_label.setText(
-            f"(показано {len(filtered)} из {len(self._all_results)})"
-        )
+        # Проверяем, нужно ли ограничить вывод
+        display_count = len(filtered)
+        is_limited = False
+        if display_count > self.MAX_DISPLAY_ROWS:
+            display_count = self.MAX_DISPLAY_ROWS
+            is_limited = True
+        
+        # Обновляем счётчик с предупреждением
+        if is_limited:
+            self.count_label.setText(
+                f"⚠️ Показано первых {display_count} из {len(filtered)} "
+                f"(всего {len(self._all_results)})"
+            )
+        else:
+            self.count_label.setText(
+                f"(показано {len(filtered)} из {len(self._all_results)})"
+            )
+        
+        # Запускаем ленивую загрузку таблицы
+        self._start_lazy_populate(filtered[:display_count])
     
-    def _populate_table(self, records: list):
-        """Заполнить таблицу записями"""
+    def _start_lazy_populate(self, records: list):
+        """Запустить ленивую загрузку таблицы батчами"""
+        # Останавливаем предыдущую загрузку если была
+        self._populate_timer.stop()
+        
+        # Очищаем таблицу
+        self.results_table.setUpdatesEnabled(False)
+        self.results_table.setSortingEnabled(False)
+        self.results_table.setRowCount(0)
+        self.results_table.setUpdatesEnabled(True)
+        
+        # Если записей мало, загружаем сразу
+        if len(records) <= self.BATCH_SIZE:
+            self._populate_table_sync(records)
+            return
+        
+        # Иначе запускаем ленивую загрузку
+        self._populate_data = records
+        self._populate_index = 0
+        
+        # Резервируем строки сразу
         self.results_table.setRowCount(len(records))
         
-        for row, record in enumerate(records):
+        # Запускаем таймер
+        self._populate_timer.start()
+    
+    def _populate_batch(self):
+        """Загрузить следующий батч записей"""
+        if self._populate_index >= len(self._populate_data):
+            # Загрузка завершена
+            self._populate_timer.stop()
+            self.results_table.setSortingEnabled(True)
+            return
+        
+        # Определяем диапазон батча
+        start = self._populate_index
+        end = min(start + self.BATCH_SIZE, len(self._populate_data))
+        
+        from config import DAYS_RU
+        
+        # Отключаем обновления для батча
+        self.results_table.setUpdatesEnabled(False)
+        
+        # Заполняем батч
+        for i in range(start, end):
+            record = self._populate_data[i]
+            row = i
+            
             # Дата
             self.results_table.setItem(
                 row, 0, QTableWidgetItem(str(record.date))
             )
             # День недели
-            from config import DAYS_RU
             day_ru = DAYS_RU.get(record.weekday, record.weekday)
             self.results_table.setItem(row, 1, QTableWidgetItem(day_ru))
             # Сотрудник
@@ -329,6 +453,65 @@ class AnalysisInterface(QWidget):
             # Статус
             status = self._get_status_text(record)
             self.results_table.setItem(row, 8, QTableWidgetItem(status))
+        
+        # Включаем обновления
+        self.results_table.setUpdatesEnabled(True)
+        
+        # Обновляем индекс
+        self._populate_index = end
+    
+    def _populate_table_sync(self, records: list):
+        """Синхронная загрузка для малого количества записей"""
+        self.results_table.setUpdatesEnabled(False)
+        self.results_table.setSortingEnabled(False)
+        self.results_table.setRowCount(len(records))
+        
+        from config import DAYS_RU
+        
+        for row, record in enumerate(records):
+            # Дата
+            self.results_table.setItem(
+                row, 0, QTableWidgetItem(str(record.date))
+            )
+            # День недели
+            day_ru = DAYS_RU.get(record.weekday, record.weekday)
+            self.results_table.setItem(row, 1, QTableWidgetItem(day_ru))
+            # Сотрудник
+            self.results_table.setItem(
+                row, 2, QTableWidgetItem(record.display_name)
+            )
+            # Приход
+            arrival = (
+                record.arrival_time.strftime('%H:%M')
+                if record.arrival_time else '-'
+            )
+            self.results_table.setItem(row, 3, QTableWidgetItem(arrival))
+            # Уход
+            departure = (
+                record.departure_time.strftime('%H:%M')
+                if record.departure_time else '-'
+            )
+            self.results_table.setItem(row, 4, QTableWidgetItem(departure))
+            # Часов
+            self.results_table.setItem(
+                row, 5, QTableWidgetItem(f"{record.work_hours:.1f}")
+            )
+            # Опоздание
+            late = f"{record.late_minutes} мин" if record.is_late else "-"
+            self.results_table.setItem(row, 6, QTableWidgetItem(late))
+            # Ранний уход
+            early = (
+                f"{record.early_leave_minutes} мин"
+                if record.is_early_leave else "-"
+            )
+            self.results_table.setItem(row, 7, QTableWidgetItem(early))
+            # Статус
+            status = self._get_status_text(record)
+            self.results_table.setItem(row, 8, QTableWidgetItem(status))
+        
+        # Включаем обновление и сортировку
+        self.results_table.setSortingEnabled(True)
+        self.results_table.setUpdatesEnabled(True)
     
     def _get_status_text(self, record) -> str:
         """Получить текст статуса записи"""

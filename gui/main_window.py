@@ -18,8 +18,7 @@ from gui.interfaces import (
     AnalysisInterface, AboutInterface
 )
 from gui.dialogs import PersonDialog
-from gui.workers import AnalysisWorker
-from reporters.excel_reporter import ExcelReporter
+from gui.workers import AnalysisWorker, ExportWorker
 
 
 class LogStormWindow(FluentWindow):
@@ -367,6 +366,30 @@ class LogStormWindow(FluentWindow):
     
     def _on_analysis_progress(self, message: str):
         """Обновить прогресс анализа"""
+        # Парсим сообщение для извлечения прогресса
+        if "Анализ:" in message and "/" in message and "%" in message:
+            # Формат: "Анализ: 5/78 (6%) - Имя"
+            try:
+                parts = message.split(":")
+                if len(parts) >= 2:
+                    progress_part = parts[1].split("(")[0].strip()
+                    current, total = progress_part.split("/")
+                    current = int(current)
+                    total = int(total)
+                    
+                    # Извлекаем имя пользователя если есть
+                    user_name = ""
+                    if " - " in message:
+                        user_name = message.split(" - ")[-1]
+                    
+                    self.analysisInterface.set_progress(
+                        current, total, f"Анализ: {user_name}"
+                    )
+                    return
+            except Exception:
+                pass  # Если не удалось распарсить, показываем как текст
+        
+        # Обычное текстовое сообщение
         self.analysisInterface.status_label.setText(message)
     
     def _on_analysis_finished(self, results):
@@ -426,22 +449,26 @@ class LogStormWindow(FluentWindow):
             )
             
             if file_path:
-                reporter = ExcelReporter(self.state.results)
-                reporter.generate_report(file_path)
-                
-                InfoBar.success(
-                    title="Успешно",
-                    content=f"Отчёт сохранён: {file_path}",
-                    parent=self,
-                    position=InfoBarPosition.TOP
+                # Создаём рабочий поток для экспорта
+                self.export_worker = ExportWorker(
+                    self.state.results,
+                    file_path
                 )
-        except PermissionError:
-            InfoBar.error(
-                title="Файл занят",
-                content="Закройте файл Excel и попробуйте снова",
-                parent=self,
-                position=InfoBarPosition.TOP
-            )
+                
+                # Подключаем сигналы
+                self.export_worker.progress.connect(self._on_export_progress)
+                self.export_worker.finished.connect(self._on_export_finished)
+                self.export_worker.error.connect(self._on_export_error)
+                
+                # Показываем индикатор прогресса
+                self.analysisInterface.export_btn.setEnabled(False)
+                self.analysisInterface.status_label.setText(
+                    "Экспорт в Excel..."
+                )
+                
+                # Запускаем
+                self.export_worker.start()
+                
         except Exception as e:
             import traceback
             error_details = f"{str(e)}\n{traceback.format_exc()}"
@@ -452,6 +479,34 @@ class LogStormWindow(FluentWindow):
                 parent=self,
                 position=InfoBarPosition.TOP
             )
+    
+    def _on_export_progress(self, message: str):
+        """Обновить прогресс экспорта"""
+        self.analysisInterface.status_label.setText(message)
+    
+    def _on_export_finished(self, file_path: str):
+        """Экспорт завершён"""
+        self.analysisInterface.export_btn.setEnabled(True)
+        self.analysisInterface.status_label.setText("Экспорт завершён")
+        
+        InfoBar.success(
+            title="Успешно",
+            content=f"Отчёт сохранён: {file_path}",
+            parent=self,
+            position=InfoBarPosition.TOP
+        )
+    
+    def _on_export_error(self, error_msg: str):
+        """Ошибка экспорта"""
+        self.analysisInterface.export_btn.setEnabled(True)
+        self.analysisInterface.status_label.setText("Ошибка экспорта")
+        
+        InfoBar.error(
+            title="Ошибка",
+            content=f"Ошибка экспорта: {error_msg}",
+            parent=self,
+            position=InfoBarPosition.TOP
+        )
     
     def _init_navigation(self):
         """Инициализация навигации"""

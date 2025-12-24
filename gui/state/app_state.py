@@ -146,6 +146,11 @@ class AppState:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                 
+                # Загружаем источник данных
+                data_source = config.get('data_source', {})
+                self.data_source_type = data_source.get('type', 'files')
+                self.sqlite_path = data_source.get('path', '')
+                
                 self.files = config.get('files', [])
                 self.verbose = config.get('verbose', False)
                 
@@ -179,6 +184,14 @@ class AppState:
         """
         try:
             config = {
+                'data_source': {
+                    'type': self.data_source_type,
+                    'path': (
+                        self.sqlite_path
+                        if self.data_source_type == 'sqlite'
+                        else None
+                    )
+                },
                 'files': self.files,
                 'verbose': self.verbose,
                 'prefs_file': str(self.prefs_file),

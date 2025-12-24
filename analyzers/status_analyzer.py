@@ -155,7 +155,11 @@ class StatusAnalyzer:
             LATE_THRESHOLD_MINUTES < record.late_minutes < CRITICAL_LATE_MINUTES):
             issues.append(f"Опоздание {record.late_minutes} мин")
         
-        # 3. Недоработка (не критическая: >= 3 часов, но < нормы)
+        # 3. Ранний уход
+        if record.is_early_leave:
+            issues.append(f"Ранний уход {record.early_leave_minutes} мин")
+        
+        # 4. Недоработка (не критическая: >= 3 часов, но < нормы)
         hours_diff = record.expected_hours - record.work_hours
         is_not_critical = record.work_hours >= CRITICAL_UNDERWORK_HOURS
         if record.is_underwork and is_not_critical:

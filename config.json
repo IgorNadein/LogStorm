@@ -1,8 +1,4 @@
 {
-  "data_source": {
-    "type": "sqlite",
-    "path": "//172.11.1.254/Face_ID/data/events.db"
-  },
   "files": [
     "//172.11.1.254/Face_ID/logs/events.ndjson"
   ],

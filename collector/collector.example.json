@@ -1,7 +1,17 @@
 {
-  "output_file": "//SERVER/share/logstorm/events.ndjson",
+  "storage": {
+    "ndjson": "//SERVER/share/logstorm/events.ndjson",
+    "sqlite": "//SERVER/share/logstorm/events.db"
+  },
   "log_file": "collector.log",
   "interval_minutes": 15,
+  "max_parallel": 4,
+  "initial_days": 30,
+  "images": {
+    "enabled": true,
+    "folder": "//SERVER/share/logstorm/images",
+    "format": "{date}/{employeeNoString}_{serialNo}.jpg"
+  },
   "devices": [
     {
       "name": "Камера входа",

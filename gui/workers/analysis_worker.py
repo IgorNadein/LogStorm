@@ -44,10 +44,10 @@ class AnalysisWorker(QThread):
             self.progress.emit("Загрузка файлов...")
             df = DataLoader.load_logs(self.files, person_mapper=person_mapper)
             
-            # Анализ посещаемости
+            # Анализ посещаемости с callback для прогресса
             self.progress.emit("Анализ посещаемости...")
             service = AttendanceService(df, self.prefs)
-            results = service.analyze_all()
+            results = service.analyze_all(progress_callback=self._on_progress)
             
             self.progress.emit("Готово!")
             self.finished.emit(results)
@@ -57,3 +57,9 @@ class AnalysisWorker(QThread):
             error_details = f"{str(e)}\n{traceback.format_exc()}"
             print(f"ОШИБКА АНАЛИЗА:\n{error_details}")
             self.error.emit(str(e))
+    
+    def _on_progress(self, current: int, total: int, user_name: str):
+        """Обработка прогресса анализа"""
+        percent = int((current / total) * 100)
+        msg = f"Анализ: {current}/{total} ({percent}%) - {user_name}"
+        self.progress.emit(msg)

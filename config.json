@@ -1,8 +1,8 @@
 {
   "files": [
-    "\\\\pandora\\box\\logs\\events.ndjson"
+    "//172.11.1.254/Face_ID/logs/events.ndjson"
   ],
   "verbose": true,
-  "prefs_file": "C:\\Users\\Игорь\\Dev\\LogStorm\\person_mapping.json",
+  "prefs_file": "\\\\172.11.1.254\\Face_ID\\person.json",
   "export_dir": "reports"
 }

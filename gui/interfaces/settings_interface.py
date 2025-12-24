@@ -4,16 +4,21 @@ Settings Interface - интерфейс настроек приложения
 
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QButtonGroup
 )
+from PySide6.QtCore import Signal
 from qfluentwidgets import (
     CardWidget, PrimaryPushButton, PushButton, ListWidget, CheckBox,
-    StrongBodyLabel, BodyLabel, LineEdit, InfoBar, InfoBarPosition
+    StrongBodyLabel, BodyLabel, LineEdit, InfoBar, InfoBarPosition,
+    RadioButton
 )
 
 
 class SettingsInterface(QWidget):
     """Интерфейс настроек приложения"""
+    
+    # Сигнал изменения источника данных
+    data_source_changed = Signal(str, str)  # (type, path)
     
     def __init__(self, parent=None):
         """
@@ -34,9 +39,63 @@ class SettingsInterface(QWidget):
         title = StrongBodyLabel("Настройки анализа", self)
         layout.addWidget(title)
         
-        # Карточка: Файлы логов
-        files_card = CardWidget(self)
-        files_layout = QVBoxLayout(files_card)
+        # === Карточка: Источник данных ===
+        source_card = CardWidget(self)
+        source_layout = QVBoxLayout(source_card)
+        source_layout.setSpacing(12)
+        
+        source_label = StrongBodyLabel("Источник данных")
+        source_layout.addWidget(source_label)
+        
+        info_label = BodyLabel(
+            "SQLite рекомендуется для больших объёмов данных "
+            "(быстрее и меньше памяти)"
+        )
+        source_layout.addWidget(info_label)
+        
+        # Радиокнопки выбора источника
+        self.source_group = QButtonGroup(self)
+        
+        source_buttons_layout = QHBoxLayout()
+        source_buttons_layout.setSpacing(16)
+        
+        self.sqlite_radio = RadioButton("SQLite база данных", self)
+        self.files_radio = RadioButton("NDJSON/CSV файлы", self)
+        
+        self.source_group.addButton(self.sqlite_radio, 0)
+        self.source_group.addButton(self.files_radio, 1)
+        
+        self.sqlite_radio.setChecked(True)  # По умолчанию SQLite
+        
+        source_buttons_layout.addWidget(self.sqlite_radio)
+        source_buttons_layout.addWidget(self.files_radio)
+        source_buttons_layout.addStretch()
+        
+        source_layout.addLayout(source_buttons_layout)
+        
+        # SQLite путь
+        sqlite_layout = QHBoxLayout()
+        sqlite_layout.setSpacing(8)
+        
+        self.sqlite_edit = LineEdit(self)
+        self.sqlite_edit.setPlaceholderText(
+            "//172.11.1.254/Face_ID/data/events.db"
+        )
+        
+        self.sqlite_btn = PushButton("Обзор", self)
+        self.sqlite_btn.clicked.connect(self._select_sqlite_file)
+        
+        sqlite_layout.addWidget(BodyLabel("БД:"))
+        sqlite_layout.addWidget(self.sqlite_edit)
+        sqlite_layout.addWidget(self.sqlite_btn)
+        
+        source_layout.addLayout(sqlite_layout)
+        
+        layout.addWidget(source_card)
+        
+        # Карточка: Файлы логов (показывается только для files_radio)
+        self.files_card = CardWidget(self)
+        files_layout = QVBoxLayout(self.files_card)
         files_layout.setSpacing(12)
         
         files_label = StrongBodyLabel("Файлы логов")
@@ -145,7 +204,45 @@ class SettingsInterface(QWidget):
         
         layout.addLayout(actions_layout)
         
+        # Подключение сигналов
+        self.sqlite_radio.toggled.connect(self._on_source_changed)
+        self.files_radio.toggled.connect(self._on_source_changed)
+        
+        # Инициализация видимости
+        self._on_source_changed()
+        
         layout.addStretch()
+    
+    def _on_source_changed(self):
+        """Обработка изменения источника данных"""
+        is_sqlite = self.sqlite_radio.isChecked()
+        self.files_card.setVisible(not is_sqlite)
+        
+        # Испускаем сигнал об изменении
+        if is_sqlite:
+            self.data_source_changed.emit('sqlite', self.sqlite_edit.text())
+        else:
+            self.data_source_changed.emit('files', '')
+    
+    def _select_sqlite_file(self):
+        """Выбрать SQLite файл"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите SQLite базу данных",
+            "",
+            "SQLite Files (*.db *.sqlite *.sqlite3);;All Files (*)"
+        )
+        
+        if file_path:
+            self.sqlite_edit.setText(file_path)
+            InfoBar.success(
+                "База выбрана",
+                f"Выбран файл: {Path(file_path).name}",
+                parent=self,
+                duration=2000,
+                position=InfoBarPosition.TOP_RIGHT
+            )
+            self.data_source_changed.emit('sqlite', file_path)
     
     def _select_prefs_file(self):
         """Выбрать файл person_prefs.json"""

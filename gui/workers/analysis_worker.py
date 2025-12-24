@@ -17,19 +17,26 @@ class AnalysisWorker(QThread):
     error = Signal(str)      # Сигнал ошибки
     progress = Signal(str)   # Сигнал прогресса
     
-    def __init__(self, files, prefs, prefs_file=None):
+    def __init__(
+        self, files, prefs, prefs_file=None,
+        data_source_type='files', **kwargs
+    ):
         """
         Инициализация worker
         
         Args:
-            files: Список путей к файлам логов
+            files: Список путей к файлам логов (или путь к БД)
             prefs: Словарь настроек сотрудников
             prefs_file: Путь к файлу с настройками (для PersonMapper)
+            data_source_type: Тип источника ('files' или 'sqlite')
+            **kwargs: Дополнительные параметры (для SQLite)
         """
         super().__init__()
         self.files = files
         self.prefs = prefs
         self.prefs_file = prefs_file
+        self.data_source_type = data_source_type
+        self.kwargs = kwargs
     
     def run(self):
         """Выполнить анализ в фоновом потоке"""
@@ -40,9 +47,26 @@ class AnalysisWorker(QThread):
                 self.progress.emit("Инициализация маппера сотрудников...")
                 person_mapper = PersonMapper(str(self.prefs_file))
             
-            # Загрузка данных с учётом алиасов
-            self.progress.emit("Загрузка файлов...")
-            df = DataLoader.load_logs(self.files, person_mapper=person_mapper)
+            # Загрузка данных с учётом источника
+            if self.data_source_type == 'sqlite':
+                self.progress.emit("Загрузка данных из SQLite...")
+                # files содержит путь к БД
+                db_path = (
+                    self.files if isinstance(self.files, str)
+                    else self.files[0]
+                )
+                df = DataLoader.load_logs(
+                    db_path,
+                    file_type='sqlite',
+                    person_mapper=person_mapper,
+                    **self.kwargs
+                )
+            else:
+                self.progress.emit("Загрузка файлов...")
+                df = DataLoader.load_logs(
+                    self.files,
+                    person_mapper=person_mapper
+                )
             
             # Анализ посещаемости с callback для прогресса
             self.progress.emit("Анализ посещаемости...")

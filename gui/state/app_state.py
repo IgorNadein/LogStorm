@@ -21,6 +21,13 @@ class AppState:
         self.prefs_file = Path("path/person_prefs.json")
         self.export_dir = Path("reports/")
         self.config_file = Path("config.json")
+        
+        # Источник данных (новое в v2.0)
+        self.data_source_type: str = 'files'  # 'files' или 'sqlite'
+        self.sqlite_path: str = ''
+        self.filter_start_date = None  # Для фильтрации SQLite
+        self.filter_end_date = None
+        self.filter_devices = None
     
     def load_prefs(self) -> bool:
         """

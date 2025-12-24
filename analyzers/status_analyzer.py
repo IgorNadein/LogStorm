@@ -98,7 +98,8 @@ class StatusAnalyzer:
         Проверка переработки
         
         Логика:
-        - В рабочий день: переработка если отработал больше expected_hours
+        - В рабочий день: переработка если отработал больше чем
+          expected_hours + 1 час
         - В выходной день: переработка если есть хоть одна запись
         
         Args:
@@ -108,8 +109,9 @@ class StatusAnalyzer:
             True если есть переработка
         """
         if record.is_workday:
-            # В рабочий день - если отработал больше положенного
-            return record.work_hours > record.expected_hours
+            # В рабочий день - если отработал больше положенного + 1 час
+            overtime_threshold = record.expected_hours + 1
+            return record.work_hours > overtime_threshold
         else:
             # В выходной - любая работа = переработка
             return record.appearances > 0

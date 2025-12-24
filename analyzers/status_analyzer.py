@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Tuple, List
 from models import AttendanceRecord
 from config import (
-    OVERTIME_THRESHOLD,
     LATE_THRESHOLD_MINUTES,
     CRITICAL_LATE_MINUTES,
     CRITICAL_UNDERWORK_HOURS
@@ -99,7 +98,7 @@ class StatusAnalyzer:
         Проверка переработки
         
         Логика:
-        - В рабочий день: переработка если >OVERTIME_THRESHOLD (10) часов
+        - В рабочий день: переработка если отработал больше expected_hours
         - В выходной день: переработка если есть хоть одна запись
         
         Args:
@@ -109,8 +108,8 @@ class StatusAnalyzer:
             True если есть переработка
         """
         if record.is_workday:
-            # В рабочий день - если >10 часов
-            return record.work_hours > OVERTIME_THRESHOLD
+            # В рабочий день - если отработал больше положенного
+            return record.work_hours > record.expected_hours
         else:
             # В выходной - любая работа = переработка
             return record.appearances > 0

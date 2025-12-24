@@ -67,11 +67,11 @@ class SQLiteLoader:
         if df.empty:
             return df
         
-        # Преобразование типов
+        # Преобразование типов для совместимости с AttendanceService
         df['time'] = pd.to_datetime(df['time'])
         df['timestamp'] = df['time']  # Алиас для совместимости
-        df['date'] = df['time'].dt.date
-        df['time_only'] = df['time'].dt.time
+        df['date'] = df['timestamp'].dt.date
+        df['time'] = df['timestamp'].dt.time  # time как time object
         
         # Применение маппинга сотрудников (если есть)
         if person_mapper:

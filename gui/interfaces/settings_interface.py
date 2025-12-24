@@ -30,6 +30,8 @@ class SettingsInterface(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("settingsInterface")
         
+        self._initializing = True  # Флаг для предотвращения лишних сигналов
+        
         # Главный layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(32, 32, 32, 32)
@@ -126,7 +128,7 @@ class SettingsInterface(QWidget):
         self.files_list.setMaximumHeight(150)
         files_layout.addWidget(self.files_list)
         
-        layout.addWidget(files_card)
+        layout.addWidget(files_label)
         
         # Карточка: Пути
         paths_card = CardWidget(self)
@@ -211,12 +213,19 @@ class SettingsInterface(QWidget):
         # Инициализация видимости
         self._on_source_changed()
         
+        # Завершение инициализации
+        self._initializing = False
+        
         layout.addStretch()
     
     def _on_source_changed(self):
         """Обработка изменения источника данных"""
         is_sqlite = self.sqlite_radio.isChecked()
         self.files_card.setVisible(not is_sqlite)
+        
+        # Не emit сигнал во время инициализации
+        if self._initializing:
+            return
         
         # Испускаем сигнал об изменении
         if is_sqlite:

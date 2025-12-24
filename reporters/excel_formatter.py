@@ -228,8 +228,17 @@ class ExcelFormatter:
                         # Приоритет 3: Опоздание (только приход жёлтый)
                         elif status.get('late', False):
                             cell_in.fill = self.styles['underwork_cell_fill']
+                            # Проверяем также ранний уход
+                            if status.get('early_leave', False):
+                                cell_out.fill = (
+                                    self.styles['underwork_cell_fill']
+                                )
                         
-                        # Приоритет 4: Переработка (зелёный)
+                        # Приоритет 4: Ранний уход (только уход жёлтый)
+                        elif status.get('early_leave', False):
+                            cell_out.fill = self.styles['underwork_cell_fill']
+                        
+                        # Приоритет 5: Переработка (зелёный)
                         elif status.get('overtime', False):
                             cell_in.fill = self.styles['overtime_cell_fill']
                             cell_out.fill = self.styles['overtime_cell_fill']

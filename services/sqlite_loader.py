@@ -85,9 +85,10 @@ class SQLiteLoader:
         """Применение маппинга имён сотрудников"""
         # Создаём колонку mapped_name
         df['mapped_name'] = df.apply(
-            lambda row: person_mapper.get_full_name(
+            lambda row: self._get_mapped_name(
                 row.get('employeeNoString', ''),
-                row.get('name', '')
+                row.get('name', ''),
+                person_mapper
             ),
             axis=1
         )
@@ -99,6 +100,24 @@ class SQLiteLoader:
         df.drop(columns=['mapped_name'], inplace=True)
         
         return df
+    
+    def _get_mapped_name(
+        self, employee_id: str, original_name: str, person_mapper
+    ) -> str:
+        """Получить маппированное имя сотрудника"""
+        try:
+            # Разрешаем person_id через employee_id и имя
+            person_id = person_mapper.resolve_person_id(
+                employee_id, original_name
+            )
+            # Получаем отображаемое имя
+            display_name = person_mapper.get_display_name(person_id)
+            # Возвращаем только если нашли маппинг
+            if display_name != person_id:
+                return display_name
+        except Exception:
+            pass
+        return None
     
     def get_device_list(self) -> List[str]:
         """Получить список всех устройств в БД"""
@@ -125,7 +144,7 @@ class SQLiteLoader:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT 
+            SELECT
                 date(MIN(time)) as min_date,
                 date(MAX(time)) as max_date
             FROM events
@@ -156,15 +175,15 @@ class SQLiteLoader:
         
         # Количество уникальных сотрудников
         cursor.execute("""
-            SELECT COUNT(DISTINCT employeeNoString) 
-            FROM events 
+            SELECT COUNT(DISTINCT employeeNoString)
+            FROM events
             WHERE employeeNoString IS NOT NULL
         """)
         total_employees = cursor.fetchone()[0]
         
         # Диапазон дат
         cursor.execute("""
-            SELECT 
+            SELECT
                 date(MIN(time)) as min_date,
                 date(MAX(time)) as max_date
             FROM events

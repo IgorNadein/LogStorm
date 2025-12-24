@@ -10,18 +10,20 @@ import os
 
 
 class DataLoader:
-    """Загрузка данных из файлов"""
+    """Загрузка данных из файлов и баз данных"""
     
     @staticmethod
     def load_logs(path, file_type: str = 'auto',
-                  person_mapper=None) -> pd.DataFrame:
+                  person_mapper=None, **kwargs) -> pd.DataFrame:
         """
-        Загрузка логов посещаемости из CSV или NDJSON
+        Загрузка логов посещаемости из CSV, NDJSON или SQLite
         
         Args:
-            path: Путь к файлу (str) или список путей (list)
-            file_type: Тип файла ('csv', 'ndjson', 'auto')
-            person_mapper: Опциональный PersonMapper для маппинга сотрудников
+            path: Путь к файлу/БД (str) или список путей (list)
+            file_type: Тип ('csv', 'ndjson', 'sqlite', 'auto')
+            person_mapper: Опциональный PersonMapper для маппинга
+            **kwargs: Дополнительные параметры (для SQLite: start_date,
+                     end_date, devices)
             
         Returns:
             DataFrame с логами (timestamp, date, time)
@@ -32,19 +34,24 @@ class DataLoader:
                 path, file_type, person_mapper
             )
         
-        # Одиночный файл - оригинальная логика
-        return DataLoader._load_single_file(path, file_type, person_mapper)
+        # Одиночный файл/БД - оригинальная логика
+        return DataLoader._load_single_file(
+            path, file_type, person_mapper, **kwargs
+        )
     
     @staticmethod
-    def _load_single_file(path: str, file_type: str = 'auto',
-                         person_mapper=None) -> pd.DataFrame:
+    def _load_single_file(
+        path: str, file_type: str = 'auto',
+        person_mapper=None, **kwargs
+    ) -> pd.DataFrame:
         """
-        Загрузка одного файла логов
+        Загрузка одного файла логов или SQLite БД
         
         Args:
-            path: Путь к файлу с логами
-            file_type: Тип файла ('csv', 'ndjson', 'auto')
-            person_mapper: Опциональный PersonMapper для маппинга сотрудников
+            path: Путь к файлу/БД с логами
+            file_type: Тип ('csv', 'ndjson', 'sqlite', 'auto')
+            person_mapper: Опциональный PersonMapper для маппинга
+            **kwargs: Дополнительные параметры для SQLite
             
         Returns:
             DataFrame с логами
@@ -54,10 +61,15 @@ class DataLoader:
             ext = os.path.splitext(path)[1].lower()
             if ext in ['.ndjson', '.jsonl']:
                 file_type = 'ndjson'
+            elif ext in ['.db', '.sqlite', '.sqlite3']:
+                file_type = 'sqlite'
             elif ext == '.csv':
                 file_type = 'csv'
             else:
                 # Попытка определить по содержимому
+                if not os.path.exists(path):
+                    raise FileNotFoundError(f"Файл не найден: {path}")
+                    
                 with open(path, 'r', encoding='utf-8') as f:
                     first_line = f.readline().strip()
                     if first_line.startswith('{'):
@@ -66,7 +78,16 @@ class DataLoader:
                         file_type = 'csv'
         
         # Загрузка в зависимости от типа
-        if file_type == 'ndjson':
+        if file_type == 'sqlite':
+            from services.sqlite_loader import SQLiteLoader
+            loader = SQLiteLoader(path)
+            df = loader.load_events(
+                start_date=kwargs.get('start_date'),
+                end_date=kwargs.get('end_date'),
+                devices=kwargs.get('devices'),
+                person_mapper=person_mapper
+            )
+        elif file_type == 'ndjson':
             from services.logscam_loader import LogsCamLoader
             df = LogsCamLoader.load_ndjson(path, person_mapper)
             df = LogsCamLoader.filter_valid_passes(df)
@@ -80,15 +101,17 @@ class DataLoader:
         return df
     
     @staticmethod
-    def _load_multiple_files(paths: list, file_type: str = 'auto',
-                            person_mapper=None) -> pd.DataFrame:
+    def _load_multiple_files(
+        paths: list, file_type: str = 'auto',
+        person_mapper=None
+    ) -> pd.DataFrame:
         """
         Загрузка и объединение нескольких файлов логов
         
         Args:
             paths: Список путей к файлам
-            file_type: Тип файлов ('csv', 'ndjson', 'auto')
-            person_mapper: Опциональный PersonMapper для маппинга сотрудников
+            file_type: Тип файлов ('csv', 'ndjson', 'sqlite', 'auto')
+            person_mapper: Опциональный PersonMapper для маппинга
             
         Returns:
             Объединённый DataFrame

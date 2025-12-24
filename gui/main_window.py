@@ -51,7 +51,27 @@ class LogStormWindow(FluentWindow):
         """Загрузить начальные данные"""
         # Загружаем конфигурацию
         if self.state.load_config():
-            # Обновляем UI
+            # Блокируем сигналы при загрузке
+            self.settingsInterface.sqlite_radio.blockSignals(True)
+            self.settingsInterface.files_radio.blockSignals(True)
+            
+            # Обновляем UI источника данных
+            if self.state.data_source_type == 'sqlite':
+                self.settingsInterface.sqlite_radio.setChecked(True)
+                self.settingsInterface.sqlite_edit.setText(
+                    self.state.sqlite_path
+                )
+            else:
+                self.settingsInterface.files_radio.setChecked(True)
+            
+            # Обновляем видимость карточек
+            self.settingsInterface._on_source_changed()
+            
+            # Разблокируем сигналы
+            self.settingsInterface.sqlite_radio.blockSignals(False)
+            self.settingsInterface.files_radio.blockSignals(False)
+            
+            # Обновляем UI настроек
             self.settingsInterface.prefs_edit.setText(
                 str(self.state.prefs_file)
             )

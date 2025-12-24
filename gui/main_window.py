@@ -99,6 +99,9 @@ class LogStormWindow(FluentWindow):
         self.settingsInterface.save_config_btn.clicked.connect(
             self._on_save_config
         )
+        self.settingsInterface.data_source_changed.connect(
+            self._on_data_source_changed
+        )
         
         # Сотрудники
         self.personsInterface.refresh_btn.clicked.connect(
@@ -297,8 +300,24 @@ class LogStormWindow(FluentWindow):
                 position=InfoBarPosition.TOP
             )
     
+    def _on_data_source_changed(self, source_type: str, path: str):
+        """Обработка изменения источника данных"""
+        self.state.data_source_type = source_type
+        if source_type == 'sqlite':
+            self.state.sqlite_path = path
+            print(f"Источник данных изменён: SQLite ({path})")
+        else:
+            print("Источник данных изменён: NDJSON/CSV файлы")
+    
     def _on_apply_settings(self):
         """Применить настройки"""
+        # Сохраняем источник данных
+        if self.settingsInterface.sqlite_radio.isChecked():
+            self.state.data_source_type = 'sqlite'
+            self.state.sqlite_path = self.settingsInterface.sqlite_edit.text()
+        else:
+            self.state.data_source_type = 'files'
+        
         # Сохраняем файлы
         self.state.files = [
             self.settingsInterface.files_list.item(i).text()
@@ -339,20 +358,37 @@ class LogStormWindow(FluentWindow):
     
     def _on_run_analysis(self):
         """Запустить анализ"""
-        if not self.state.files:
-            InfoBar.error(
-                title="Ошибка",
-                content="Сначала добавьте файлы в настройках",
-                parent=self,
-                position=InfoBarPosition.TOP
-            )
-            return
+        # Проверка наличия источника данных
+        if self.state.data_source_type == 'sqlite':
+            if not self.state.sqlite_path:
+                InfoBar.error(
+                    title="Ошибка",
+                    content="Укажите путь к SQLite базе в настройках",
+                    parent=self,
+                    position=InfoBarPosition.TOP
+                )
+                return
+            data_source = self.state.sqlite_path
+        else:
+            if not self.state.files:
+                InfoBar.error(
+                    title="Ошибка",
+                    content="Сначала добавьте файлы в настройках",
+                    parent=self,
+                    position=InfoBarPosition.TOP
+                )
+                return
+            data_source = self.state.files
         
         # Создаём рабочий поток
         self.analysis_worker = AnalysisWorker(
-            self.state.files,
+            data_source,
             self.state.prefs,
-            str(self.state.prefs_file)
+            str(self.state.prefs_file),
+            data_source_type=self.state.data_source_type,
+            start_date=self.state.filter_start_date,
+            end_date=self.state.filter_end_date,
+            devices=self.state.filter_devices
         )
         
         # Подключаем сигналы

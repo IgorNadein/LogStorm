@@ -135,7 +135,21 @@ def setup_logging(log_file: str, verbose: bool = False) -> logging.Logger:
     fh.setFormatter(fmt)
     logger.addHandler(fh)
     
-    # Консоль
+    # Консоль с правильной кодировкой для Windows
+    try:
+        import sys
+        import io
+        # Принудительно устанавливаем UTF-8 для stdout
+        if sys.platform == 'win32':
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer,
+                encoding='utf-8',
+                errors='replace',
+                line_buffering=True
+            )
+    except Exception:
+        pass  # Игнорируем ошибки настройки кодировки
+    
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG if verbose else logging.INFO)
     ch.setFormatter(fmt)

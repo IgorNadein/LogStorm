@@ -65,6 +65,22 @@ class PersonDialog(QDialog):
         )
         form_layout.addRow(QLabel("Начало работы:"), self.start_time_edit)
         
+        # Время окончания работы
+        self.end_time_edit = LineEdit(self)
+        self.end_time_edit.setPlaceholderText("18:00 (опционально)")
+        self.end_time_edit.setText(
+            self.person_data.get('end_time', '')
+        )
+        form_layout.addRow(QLabel("Конец работы:"), self.end_time_edit)
+        
+        # Рабочие часы
+        self.work_hours_edit = LineEdit(self)
+        self.work_hours_edit.setPlaceholderText("9 (опционально)")
+        work_hours = self.person_data.get('work_hours')
+        if work_hours:
+            self.work_hours_edit.setText(str(work_hours))
+        form_layout.addRow(QLabel("Рабочих часов:"), self.work_hours_edit)
+        
         # Рабочие дни
         self.workdays_edit = LineEdit(self)
         self.workdays_edit.setPlaceholderText(
@@ -74,6 +90,18 @@ class PersonDialog(QDialog):
         if workdays:
             self.workdays_edit.setText(", ".join(workdays))
         form_layout.addRow(QLabel("Рабочие дни:"), self.workdays_edit)
+        
+        # Оригинальные имена (из камеры)
+        self.original_names_edit = LineEdit(self)
+        self.original_names_edit.setPlaceholderText(
+            "Employee Sample, Ivan Ivanov (через запятую)"
+        )
+        original_names = self.person_data.get('original_names', [])
+        if original_names:
+            self.original_names_edit.setText(", ".join(original_names))
+        form_layout.addRow(
+            QLabel("Имена из камеры:"), self.original_names_edit
+        )
         
         # Алиасы (дополнительные ID)
         self.aliases_edit = LineEdit(self)
@@ -117,11 +145,34 @@ class PersonDialog(QDialog):
         if start_time:
             data['start_time'] = start_time
         
+        # Добавляем end_time если указан
+        end_time = self.end_time_edit.text().strip()
+        if end_time:
+            data['end_time'] = end_time
+        
+        # Добавляем work_hours если указаны
+        work_hours_text = self.work_hours_edit.text().strip()
+        if work_hours_text:
+            try:
+                data['work_hours'] = int(work_hours_text)
+            except ValueError:
+                # Если не удалось преобразовать в int, пропускаем
+                pass
+        
         # Добавляем workdays если указаны
         workdays_text = self.workdays_edit.text().strip()
         if workdays_text:
             workdays = [day.strip() for day in workdays_text.split(',')]
             data['workdays'] = workdays
+        
+        # Добавляем original_names если указаны
+        original_names_text = self.original_names_edit.text().strip()
+        if original_names_text:
+            original_names = [
+                name.strip() for name in original_names_text.split(',')
+                if name.strip()
+            ]
+            data['original_names'] = original_names
         
         # Добавляем алиасы если указаны
         aliases_text = self.aliases_edit.text().strip()

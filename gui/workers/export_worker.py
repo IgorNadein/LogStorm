@@ -14,17 +14,19 @@ class ExportWorker(QThread):
     error = Signal(str)     # Сигнал ошибки
     progress = Signal(str)  # Сигнал прогресса
     
-    def __init__(self, results, file_path):
+    def __init__(self, results, file_path, color_scheme=None):
         """
         Инициализация worker
         
         Args:
             results: Список AttendanceRecord для экспорта
             file_path: Путь к файлу Excel
+            color_scheme: ColorScheme для умных цветов (опционально)
         """
         super().__init__()
         self.results = results
         self.file_path = file_path
+        self.color_scheme = color_scheme
     
     def run(self):
         """Выполнить экспорт в фоновом потоке"""
@@ -32,7 +34,7 @@ class ExportWorker(QThread):
             self.progress.emit("Подготовка данных...")
             
             # Создаём репортер и генерируем отчёт
-            reporter = ExcelReporter(self.results)
+            reporter = ExcelReporter(self.results, self.color_scheme)
             
             self.progress.emit("Формирование Excel файла...")
             reporter.generate_report(self.file_path)

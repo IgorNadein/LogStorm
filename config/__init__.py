@@ -6,6 +6,7 @@ LogStorm Configuration Package
 Использование (новый способ):
     from config import config_manager
     threshold = config_manager.analysis.late_threshold_minutes
+    colors = config_manager.colors
 
 Использование (обратная совместимость):
     from config import LATE_THRESHOLD_MINUTES
@@ -15,6 +16,13 @@ from .analysis import AnalysisConfig, ScheduleConfig, analysis_config
 from .formatting import FormattingConfig, formatting_config
 from .paths import PathsConfig, paths_config
 from .localization import LocalizationConfig, localization_config
+from .colors import (
+    ColorScheme,
+    ColorThresholds,
+    default_color_scheme,
+    load_color_scheme_from_dict,
+    save_color_scheme_to_dict
+)
 
 
 class ConfigManager:
@@ -26,6 +34,7 @@ class ConfigManager:
         config_manager.formatting.header_color
         config_manager.paths.logs_file
         config_manager.localization.days_ru['Monday']
+        config_manager.colors.neutral
     """
     
     def __init__(self):
@@ -33,6 +42,7 @@ class ConfigManager:
         self.formatting = formatting_config
         self.paths = paths_config
         self.localization = localization_config
+        self.colors = default_color_scheme
     
     def reload(self):
         """Перезагрузить конфигурацию из файла (для будущего использования)"""

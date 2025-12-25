@@ -163,10 +163,22 @@ class AttendanceService:
             group = grouped.get_group((user_name, date))
             
             # Используем ВСЕ записи (без фильтрации ночных)
-            first_entry = group['timestamp'].min()
-            last_entry = group['timestamp'].max()
+            first_entry_idx = group['timestamp'].idxmin()
+            last_entry_idx = group['timestamp'].idxmax()
+            
+            first_entry = group.loc[first_entry_idx, 'timestamp']
+            last_entry = group.loc[last_entry_idx, 'timestamp']
+            
             arrival_time = first_entry.time()
             departure_time = last_entry.time()
+            
+            # Извлекаем пути к фото из поля _imagePath (если есть)
+            arrival_photo_path = group.loc[first_entry_idx].get(
+                '_imagePath', None
+            )
+            departure_photo_path = group.loc[last_entry_idx].get(
+                '_imagePath', None
+            )
             
             # Расчет рабочих часов
             work_duration = (
@@ -183,6 +195,8 @@ class AttendanceService:
             departure_time = None
             work_hours = 0
             appearances = 0
+            arrival_photo_path = None
+            departure_photo_path = None
         
         # Создаём запись
         return AttendanceRecord(
@@ -197,5 +211,7 @@ class AttendanceService:
             is_workday=is_workday,
             schedule_start=schedule.start_time,
             schedule_end=schedule.end_time,
-            expected_hours=schedule.expected_hours
+            expected_hours=schedule.expected_hours,
+            arrival_photo_path=arrival_photo_path,
+            departure_photo_path=departure_photo_path
         )

@@ -5,6 +5,12 @@ App State - управление состоянием приложения
 import json
 from pathlib import Path
 from typing import List, Dict
+from config.colors import (
+    ColorScheme,
+    default_color_scheme,
+    load_color_scheme_from_dict,
+    save_color_scheme_to_dict
+)
 
 
 class AppState:
@@ -28,6 +34,9 @@ class AppState:
         self.filter_start_date = None  # Для фильтрации SQLite
         self.filter_end_date = None
         self.filter_devices = None
+        
+        # Цветовая схема (новое в v2.1)
+        self.color_scheme: ColorScheme = default_color_scheme
     
     def load_prefs(self) -> bool:
         """
@@ -98,8 +107,8 @@ class AppState:
         try:
             self.prefs_file.parent.mkdir(parents=True, exist_ok=True)
             
-            # Определяем формат файла
-            if 'person_mapping' in str(self.prefs_file):
+            # Определяем формат: если есть aliases - новый формат
+            if self.aliases:
                 # Новый формат с aliases
                 data = {
                     "README": "Конфигурация для маппинга сотрудников",
@@ -107,14 +116,20 @@ class AppState:
                     "aliases": self.aliases
                 }
             else:
-                # Старый формат
+                # Старый формат (без aliases)
                 data = self.prefs
             
             with open(self.prefs_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            print(f"✓ Prefs сохранены: {self.prefs_file}")
+            print(f"  Сотрудников: {len(self.prefs)}, "
+                  f"Алиасов: {len(self.aliases)}")
             return True
         except Exception as e:
             print(f"Ошибка сохранения prefs: {e}")
+            import traceback
+            traceback.print_exc()
         return False
     
     def get_persons_list(self) -> List[str]:
@@ -150,6 +165,12 @@ class AppState:
                 data_source = config.get('data_source', {})
                 self.data_source_type = data_source.get('type', 'files')
                 self.sqlite_path = data_source.get('path', '')
+                
+                # Загружаем цветовую схему
+                if 'color_scheme' in config:
+                    self.color_scheme = load_color_scheme_from_dict(
+                        config['color_scheme']
+                    )
                 
                 self.files = config.get('files', [])
                 self.verbose = config.get('verbose', False)
@@ -192,6 +213,9 @@ class AppState:
                         else None
                     )
                 },
+                'color_scheme': save_color_scheme_to_dict(
+                    self.color_scheme
+                ),
                 'files': self.files,
                 'verbose': self.verbose,
                 'prefs_file': str(self.prefs_file),

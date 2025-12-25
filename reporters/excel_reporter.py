@@ -19,13 +19,15 @@ from config import (
 class ExcelReporter:
     """Генерация Excel отчётов из записей посещаемости"""
     
-    def __init__(self, records: List[AttendanceRecord]):
+    def __init__(self, records: List[AttendanceRecord], color_scheme=None):
         """
         Args:
             records: Список записей посещаемости
+            color_scheme: ColorScheme для умных цветов (опционально)
         """
         self.records = records
         self.monthly_status_data = {}  # Для форматирования месячных листов
+        self.color_scheme = color_scheme  # Сохраняем схему для форматтера
     
     def generate_report(self, output_file: str = OUTPUT_EXCEL_FILE):
         """
@@ -62,7 +64,7 @@ class ExcelReporter:
             return False
         
         # Применяем форматирование (цвета, границы, ширину колонок)
-        formatter = ExcelFormatter(output_file, self)
+        formatter = ExcelFormatter(output_file, self, self.color_scheme)
         formatter.format_all()
         
         print(f"Excel отчёт сохранён: {output_file}")
@@ -140,18 +142,71 @@ class ExcelReporter:
                 ]
                 
                 if not day_data.empty:
-                    row[f"{user}_Приход"] = day_data.iloc[0]['Приход']
-                    row[f"{user}_Уход"] = day_data.iloc[0]['Уход']
+                    # Находим AttendanceRecord для путей к фото
+                    record = None
+                    for rec in self.records:
+                        # Ищем по display_name (имя) или user_name (ID)
+                        if rec.date == date and rec.display_name == user:
+                            record = rec
+                            break
+                    
+                    # Записываем время с гиперссылками (если есть фото)
+                    arrival_time = day_data.iloc[0]['Приход']
+                    departure_time = day_data.iloc[0]['Уход']
+                    
+                    if record and record.arrival_photo_path and arrival_time:
+                        # Формула Excel: =HYPERLINK("путь", "текст")
+                        row[f"{user}_Приход"] = (
+                            f'=HYPERLINK("{record.arrival_photo_path}", '
+                            f'"{arrival_time}")'
+                        )
+                    else:
+                        row[f"{user}_Приход"] = arrival_time
+                    
+                    if record and record.departure_photo_path and departure_time:  # noqa: E501
+                        row[f"{user}_Уход"] = (
+                            f'=HYPERLINK("{record.departure_photo_path}", '
+                            f'"{departure_time}")'
+                        )
+                    else:
+                        row[f"{user}_Уход"] = departure_time
                     
                     # Сохраняем статус для форматирования
                     status_key = f"{date}_{user}"
+                    
                     status_matrix[status_key] = {
                         'late': day_data.iloc[0]['Опоздание'] == 'Да',
-                        'early_leave': day_data.iloc[0]['Ранний уход'] == 'Да',
-                        'underwork': day_data.iloc[0]['Недоработка часов'] == 'Да',
+                        'late_minutes': record.late_minutes if record else 0,
+                        'early_leave': (
+                            day_data.iloc[0]['Ранний уход'] == 'Да'
+                        ),
+                        'early_leave_minutes': (
+                            record.early_leave_minutes if record else 0
+                        ),
+                        'underwork': (
+                            day_data.iloc[0]['Недоработка часов'] == 'Да'
+                        ),
+                        'underwork_hours': (
+                            record.expected_hours - record.work_hours
+                            if record and record.is_underwork else 0
+                        ),
                         'overtime': day_data.iloc[0]['Переработка'] == 'Да',
-                        'technical': day_data.iloc[0]['Технический сбой'] != 'Нет',
-                        'is_workday': day_data.iloc[0]['Рабочий день'] == 'Да'
+                        'overtime_hours': (
+                            record.work_hours - record.expected_hours - 1
+                            if record and record.is_overtime else 0
+                        ),
+                        'technical': (
+                            day_data.iloc[0]['Технический сбой'] != 'Нет'
+                        ),
+                        'is_workday': (
+                            day_data.iloc[0]['Рабочий день'] == 'Да'
+                        ),
+                        'arrival_photo_path': (
+                            record.arrival_photo_path if record else None
+                        ),
+                        'departure_photo_path': (
+                            record.departure_photo_path if record else None
+                        )
                     }
                 else:
                     row[f"{user}_Приход"] = ''

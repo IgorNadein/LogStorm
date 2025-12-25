@@ -71,6 +71,9 @@ class LogStormWindow(FluentWindow):
             self.settingsInterface.sqlite_radio.blockSignals(False)
             self.settingsInterface.files_radio.blockSignals(False)
             
+            # Загружаем цветовую схему в GUI
+            self.settingsInterface.set_color_scheme(self.state.color_scheme)
+            
             # Обновляем UI настроек
             self.settingsInterface.prefs_edit.setText(
                 str(self.state.prefs_file)
@@ -331,6 +334,8 @@ class LogStormWindow(FluentWindow):
     
     def _on_apply_settings(self):
         """Применить настройки"""
+        from config.colors import ColorScheme, ColorThresholds
+        
         # Сохраняем источник данных
         if self.settingsInterface.sqlite_radio.isChecked():
             self.state.data_source_type = 'sqlite'
@@ -353,6 +358,17 @@ class LogStormWindow(FluentWindow):
         )
         self.state.export_dir = Path(
             self.settingsInterface.export_edit.text()
+        )
+        
+        # Сохраняем цветовую схему
+        colors_dict = self.settingsInterface.get_color_scheme_dict()
+        self.state.color_scheme = ColorScheme(
+            neutral=colors_dict['neutral'],
+            warning=colors_dict['warning'],
+            error=colors_dict['error'],
+            success=colors_dict['success'],
+            info=colors_dict['info'],
+            thresholds=ColorThresholds()
         )
         
         # Перезагружаем prefs если путь изменился
@@ -508,7 +524,8 @@ class LogStormWindow(FluentWindow):
                 # Создаём рабочий поток для экспорта
                 self.export_worker = ExportWorker(
                     self.state.results,
-                    file_path
+                    file_path,
+                    self.state.color_scheme  # Передаем цветовую схему
                 )
                 
                 # Подключаем сигналы

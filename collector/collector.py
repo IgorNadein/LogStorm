@@ -60,7 +60,8 @@ DEFAULT_CONFIG = {
     "images": {
         "enabled": False,  # Сохранять изображения лиц
         "folder": "//SERVER/share/logstorm/images",  # Папка для изображений
-        "format": "{date}/{employeeNoString}_{serialNo}.jpg"  # Формат имени
+        "format": "{date}/{employeeNoString}_{serialNo}.jpg",  # Формат имени
+        "unc_path": "//SERVER/share/logstorm/images"  # UNC путь для _imagePath
     },
     "devices": [
         {
@@ -261,6 +262,7 @@ def save_image(
 ) -> Optional[str]:
     """Сохранение изображения события"""
     folder = images_config.get('folder', 'images')
+    unc_path = images_config.get('unc_path', folder)  # UNC для _imagePath
     fmt = images_config.get(
         'format', '{date}/{employeeNoString}_{serialNo}.jpg'
     )
@@ -291,6 +293,20 @@ def save_image(
     try:
         with open(filepath, 'wb') as f:
             f.write(image_data)
+        
+        # Возвращаем UNC-путь вместо локального
+        # Заменяем локальную папку на UNC-путь
+        if folder and unc_path:
+            # Нормализуем пути для сравнения
+            folder_norm = folder.replace('\\', '/').rstrip('/')
+            unc_norm = unc_path.replace('\\', '/').rstrip('/')
+            filepath_norm = filepath.replace('\\', '/')
+            
+            # Если filepath начинается с folder, заменяем на unc_path
+            if filepath_norm.startswith(folder_norm):
+                relative_path = filepath_norm[len(folder_norm):].lstrip('/')
+                return f"{unc_norm}/{relative_path}".replace('/', '\\')
+        
         return filepath
     except Exception as e:
         logger.warning(f"    [WARN] Не удалось сохранить изображение: {e}")

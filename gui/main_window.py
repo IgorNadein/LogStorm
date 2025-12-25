@@ -88,6 +88,11 @@ class LogStormWindow(FluentWindow):
             # Загружаем файлы в список
             for file_path in self.state.files:
                 self.settingsInterface.files_list.addItem(file_path)
+            
+            # Обновляем список камер если есть источник данных
+            # Делаем это асинхронно, чтобы UI успел инициализироваться
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(500, self._load_cameras_and_mapping)
         
         # Загружаем настройки сотрудников
         if self.state.load_prefs():
@@ -331,6 +336,22 @@ class LogStormWindow(FluentWindow):
             print(f"Источник данных изменён: SQLite ({path})")
         else:
             print("Источник данных изменён: NDJSON/CSV файлы")
+        
+        # Автоматически обновляем список камер при изменении источника
+        # Используем QTimer чтобы дать время UI обновиться
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self.settingsInterface._refresh_cameras)
+    
+    def _load_cameras_and_mapping(self):
+        """Загрузить камеры и применить device_mapping"""
+        # Обновляем список камер
+        self.settingsInterface._refresh_cameras()
+        
+        # Применяем device_mapping после загрузки камер
+        if self.state.device_mapping:
+            self.settingsInterface.set_device_mapping(
+                self.state.device_mapping
+            )
     
     def _on_apply_settings(self):
         """Применить настройки"""
@@ -369,6 +390,11 @@ class LogStormWindow(FluentWindow):
             success=colors_dict['success'],
             info=colors_dict['info'],
             thresholds=ColorThresholds()
+        )
+        
+        # Сохраняем device_mapping
+        self.state.device_mapping = (
+            self.settingsInterface.get_device_mapping()
         )
         
         # Перезагружаем prefs если путь изменился
@@ -422,6 +448,7 @@ class LogStormWindow(FluentWindow):
             self.state.prefs,
             str(self.state.prefs_file),
             data_source_type=self.state.data_source_type,
+            device_mapping=self.state.device_mapping,
             start_date=self.state.filter_start_date,
             end_date=self.state.filter_end_date,
             devices=self.state.filter_devices

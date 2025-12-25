@@ -37,6 +37,9 @@ class AppState:
         
         # Цветовая схема (новое в v2.1)
         self.color_scheme: ColorScheme = default_color_scheme
+        
+        # Маппинг камер для прихода/ухода (новое в v2.2)
+        self.device_mapping: Dict = None
     
     def load_prefs(self) -> bool:
         """
@@ -172,6 +175,9 @@ class AppState:
                         config['color_scheme']
                     )
                 
+                # Загружаем маппинг камер
+                self.device_mapping = config.get('device_mapping', None)
+                
                 self.files = config.get('files', [])
                 self.verbose = config.get('verbose', False)
                 
@@ -216,6 +222,7 @@ class AppState:
                 'color_scheme': save_color_scheme_to_dict(
                     self.color_scheme
                 ),
+                'device_mapping': self.device_mapping,
                 'files': self.files,
                 'verbose': self.verbose,
                 'prefs_file': str(self.prefs_file),

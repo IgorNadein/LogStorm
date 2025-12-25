@@ -20,14 +20,21 @@ class AttendanceService:
     всех статусов пользователей за все дни.
     """
     
-    def __init__(self, df: pd.DataFrame, prefs: dict):
+    def __init__(self, df: pd.DataFrame, prefs: dict,
+                 device_mapping: dict = None):
         """
         Args:
             df: DataFrame с логами посещаемости
             prefs: Словарь с настройками пользователей
+            device_mapping: Опциональный словарь с маппингом камер
+                {
+                    'arrival_devices': ['IP1', 'IP2'],
+                    'departure_devices': ['IP3', 'IP4']
+                }
         """
         self.df = df
         self.prefs = prefs
+        self.device_mapping = device_mapping
         
         # Инициализация валидаторов
         print("Инициализация валидаторов...")
@@ -162,30 +169,81 @@ class AttendanceService:
         if (user_name, date) in grouped.groups:
             group = grouped.get_group((user_name, date))
             
-            # Используем ВСЕ записи (без фильтрации ночных)
-            first_entry_idx = group['timestamp'].idxmin()
-            last_entry_idx = group['timestamp'].idxmax()
+            # Фильтрация по камерам (если настройка device_mapping задана)
+            if self.device_mapping and '_device' in group.columns:
+                arrival_devices = self.device_mapping.get(
+                    'arrival_devices', []
+                )
+                departure_devices = self.device_mapping.get(
+                    'departure_devices', []
+                )
+                
+                # Фильтруем события по камерам
+                arrival_group = group[
+                    group['_device'].isin(arrival_devices)
+                ]
+                departure_group = group[
+                    group['_device'].isin(departure_devices)
+                ]
+                
+                # Приход: ТОЛЬКО с камеры входа (строго)
+                if not arrival_group.empty:
+                    first_entry_idx = arrival_group['timestamp'].idxmin()
+                    first_entry = arrival_group.loc[
+                        first_entry_idx, 'timestamp'
+                    ]
+                    arrival_time = first_entry.time()
+                    arrival_photo_path = arrival_group.loc[
+                        first_entry_idx
+                    ].get('_imagePath', None)
+                else:
+                    # Нет событий с камеры входа - не фиксируем приход
+                    arrival_time = None
+                    arrival_photo_path = None
+                
+                # Уход: ТОЛЬКО с камеры выхода (строго)
+                if not departure_group.empty:
+                    last_entry_idx = departure_group['timestamp'].idxmax()
+                    last_entry = departure_group.loc[
+                        last_entry_idx, 'timestamp'
+                    ]
+                    departure_time = last_entry.time()
+                    departure_photo_path = departure_group.loc[
+                        last_entry_idx
+                    ].get('_imagePath', None)
+                else:
+                    # Нет событий с камеры выхода - не фиксируем уход
+                    departure_time = None
+                    departure_photo_path = None
+            else:
+                # Без фильтрации - используем ВСЕ записи
+                first_entry_idx = group['timestamp'].idxmin()
+                last_entry_idx = group['timestamp'].idxmax()
+                
+                first_entry = group.loc[first_entry_idx, 'timestamp']
+                last_entry = group.loc[last_entry_idx, 'timestamp']
+                
+                arrival_time = first_entry.time()
+                departure_time = last_entry.time()
+                
+                # Извлекаем пути к фото из поля _imagePath (если есть)
+                arrival_photo_path = group.loc[first_entry_idx].get(
+                    '_imagePath', None
+                )
+                departure_photo_path = group.loc[last_entry_idx].get(
+                    '_imagePath', None
+                )
             
-            first_entry = group.loc[first_entry_idx, 'timestamp']
-            last_entry = group.loc[last_entry_idx, 'timestamp']
-            
-            arrival_time = first_entry.time()
-            departure_time = last_entry.time()
-            
-            # Извлекаем пути к фото из поля _imagePath (если есть)
-            arrival_photo_path = group.loc[first_entry_idx].get(
-                '_imagePath', None
-            )
-            departure_photo_path = group.loc[last_entry_idx].get(
-                '_imagePath', None
-            )
-            
-            # Расчет рабочих часов
-            work_duration = (
-                datetime.combine(date, departure_time) -
-                datetime.combine(date, arrival_time)
-            )
-            work_hours = work_duration.total_seconds() / 3600
+            # Расчет рабочих часов (только если есть и приход и уход)
+            if arrival_time is not None and departure_time is not None:
+                work_duration = (
+                    datetime.combine(date, departure_time) -
+                    datetime.combine(date, arrival_time)
+                )
+                work_hours = work_duration.total_seconds() / 3600
+            else:
+                # Если нет прихода или ухода - не можем вычислить часы
+                work_hours = 0
             
             # Количество появлений
             appearances = len(group)

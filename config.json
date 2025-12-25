@@ -21,6 +21,14 @@
       "overtime_full_severity_hours": 3.0
     }
   },
+  "device_mapping": {
+    "arrival_devices": [
+      "192.168.1.101"
+    ],
+    "departure_devices": [
+      "192.168.1.104"
+    ]
+  },
   "files": [
     "//172.11.1.254/Face_ID/logs/events.ndjson"
   ],

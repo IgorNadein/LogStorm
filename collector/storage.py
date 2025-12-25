@@ -40,7 +40,8 @@ class EventStorage:
     
     def _init_sqlite(self) -> None:
         """Инициализация SQLite БД"""
-        conn = sqlite3.connect(self.sqlite_path)
+        # Увеличенный timeout для сетевых дисков (30 секунд)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         
         # Таблица событий
         conn.execute('''
@@ -77,6 +78,11 @@ class EventStorage:
         )
         
         conn.commit()
+        
+        # Включить WAL mode для лучшей работы с конкурентным доступом
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=30000')  # 30 секунд
+        
         conn.close()
     
     def write_events(self, events: List[Dict[str, Any]]) -> None:
@@ -96,7 +102,7 @@ class EventStorage:
                     f.write(json.dumps(event, ensure_ascii=False) + '\n')
             
             # 2. Запись в SQLite (батчем)
-            conn = sqlite3.connect(self.sqlite_path)
+            conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
             try:
                 rows = []
                 for event in events:
@@ -132,7 +138,7 @@ class EventStorage:
             last_serial: Последний успешно собранный serialNo
             last_collect: Время последнего сбора (ISO format)
         """
-        conn = sqlite3.connect(self.sqlite_path)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         try:
             now = datetime.now().isoformat()
             conn.execute(
@@ -156,7 +162,7 @@ class EventStorage:
             Словарь с полями last_serial, last_collect, updated_at
             или None если состояния нет
         """
-        conn = sqlite3.connect(self.sqlite_path)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         try:
             cursor = conn.execute(
                 'SELECT last_serial, last_collect, updated_at '
@@ -184,7 +190,7 @@ class EventStorage:
         Returns:
             Последний serialNo или 1 если событий нет
         """
-        conn = sqlite3.connect(self.sqlite_path)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         try:
             cursor = conn.execute(
                 'SELECT MAX(serialNo) FROM events WHERE device = ?',
@@ -202,7 +208,7 @@ class EventStorage:
         Returns:
             Словарь {device: last_serialNo}
         """
-        conn = sqlite3.connect(self.sqlite_path)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         try:
             cursor = conn.execute(
                 'SELECT device, MAX(serialNo) '
@@ -223,7 +229,7 @@ class EventStorage:
         Returns:
             Количество событий
         """
-        conn = sqlite3.connect(self.sqlite_path)
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         try:
             if device:
                 cursor = conn.execute(

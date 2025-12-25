@@ -19,7 +19,7 @@ class AnalysisWorker(QThread):
     
     def __init__(
         self, files, prefs, prefs_file=None,
-        data_source_type='files', **kwargs
+        data_source_type='files', device_mapping=None, **kwargs
     ):
         """
         Инициализация worker
@@ -29,6 +29,7 @@ class AnalysisWorker(QThread):
             prefs: Словарь настроек сотрудников
             prefs_file: Путь к файлу с настройками (для PersonMapper)
             data_source_type: Тип источника ('files' или 'sqlite')
+            device_mapping: Опциональный маппинг камер для прихода/ухода
             **kwargs: Дополнительные параметры (для SQLite)
         """
         super().__init__()
@@ -36,6 +37,7 @@ class AnalysisWorker(QThread):
         self.prefs = prefs
         self.prefs_file = prefs_file
         self.data_source_type = data_source_type
+        self.device_mapping = device_mapping
         self.kwargs = kwargs
     
     def run(self):
@@ -70,7 +72,9 @@ class AnalysisWorker(QThread):
             
             # Анализ посещаемости с callback для прогресса
             self.progress.emit("Анализ посещаемости...")
-            service = AttendanceService(df, self.prefs)
+            service = AttendanceService(
+                df, self.prefs, device_mapping=self.device_mapping
+            )
             results = service.analyze_all(progress_callback=self._on_progress)
             
             self.progress.emit("Готово!")

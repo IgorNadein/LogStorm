@@ -201,6 +201,69 @@ class SettingsInterface(QWidget):
         
         layout.addWidget(options_card)
         
+        # Карточка: Настройка камер
+        cameras_card = CardWidget(self)
+        cameras_layout = QVBoxLayout(cameras_card)
+        cameras_layout.setSpacing(12)
+        
+        cameras_label = StrongBodyLabel("Настройка камер")
+        cameras_layout.addWidget(cameras_label)
+        
+        # Описание
+        cameras_info = BodyLabel(
+            "Выберите камеры для определения прихода и ухода.\n"
+            "Если не выбрано ни одной камеры, используются все события."
+        )
+        cameras_info.setWordWrap(True)
+        cameras_layout.addWidget(cameras_info)
+        
+        # Контейнер для списков камер
+        cameras_grid = QHBoxLayout()
+        cameras_grid.setSpacing(20)
+        
+        # Колонка: Камеры прихода
+        arrival_container = QVBoxLayout()
+        arrival_container.setSpacing(8)
+        
+        arrival_title = StrongBodyLabel("Камеры прихода (вход)")
+        arrival_container.addWidget(arrival_title)
+        
+        # Создаем словарь для хранения чекбоксов камер прихода
+        self.arrival_camera_checks = {}
+        self.arrival_cameras_layout = QVBoxLayout()
+        self.arrival_cameras_layout.setSpacing(4)
+        arrival_container.addLayout(self.arrival_cameras_layout)
+        
+        cameras_grid.addLayout(arrival_container)
+        
+        # Колонка: Камеры ухода
+        departure_container = QVBoxLayout()
+        departure_container.setSpacing(8)
+        
+        departure_title = StrongBodyLabel("Камеры ухода (выход)")
+        departure_container.addWidget(departure_title)
+        
+        # Создаем словарь для хранения чекбоксов камер ухода
+        self.departure_camera_checks = {}
+        self.departure_cameras_layout = QVBoxLayout()
+        self.departure_cameras_layout.setSpacing(4)
+        departure_container.addLayout(self.departure_cameras_layout)
+        
+        cameras_grid.addLayout(departure_container)
+        
+        cameras_layout.addLayout(cameras_grid)
+        
+        # Кнопка обновления списка камер
+        refresh_cameras_layout = QHBoxLayout()
+        self.refresh_cameras_btn = PushButton("Обновить список камер")
+        self.refresh_cameras_btn.setFixedHeight(32)
+        self.refresh_cameras_btn.clicked.connect(self._refresh_cameras)
+        refresh_cameras_layout.addWidget(self.refresh_cameras_btn)
+        refresh_cameras_layout.addStretch()
+        cameras_layout.addLayout(refresh_cameras_layout)
+        
+        layout.addWidget(cameras_card)
+        
         # === Карточка: Цветовая схема (КОМПАКТНАЯ) ===
         colors_card = CardWidget(content)
         colors_layout = QVBoxLayout(colors_card)
@@ -440,3 +503,166 @@ class SettingsInterface(QWidget):
         self.error_picker.setColor(QColor(f"#{scheme.error}"))
         self.success_picker.setColor(QColor(f"#{scheme.success}"))
         self.info_picker.setColor(QColor(f"#{scheme.info}"))
+    
+    def _refresh_cameras(self):
+        """Обновить список доступных камер из загруженных данных"""
+        # Очищаем текущие чекбоксы
+        self._clear_camera_checkboxes()
+        
+        # Получаем список камер из состояния приложения
+        cameras = self._get_available_cameras()
+        
+        if not cameras:
+            InfoBar.warning(
+                "Нет данных",
+                "Загрузите данные для определения доступных камер",
+                parent=self,
+                duration=3000,
+                position=InfoBarPosition.TOP_RIGHT
+            )
+            return
+        
+        # Создаем чекбоксы для каждой камеры
+        for camera_ip, camera_name in cameras.items():
+            # Чекбокс для прихода
+            arrival_check = CheckBox(f"{camera_name} ({camera_ip})", self)
+            self.arrival_camera_checks[camera_ip] = arrival_check
+            self.arrival_cameras_layout.addWidget(arrival_check)
+            
+            # Чекбокс для ухода
+            departure_check = CheckBox(f"{camera_name} ({camera_ip})", self)
+            self.departure_camera_checks[camera_ip] = departure_check
+            self.departure_cameras_layout.addWidget(departure_check)
+        
+        InfoBar.success(
+            "Камеры обновлены",
+            f"Найдено камер: {len(cameras)}",
+            parent=self,
+            duration=2000,
+            position=InfoBarPosition.TOP_RIGHT
+        )
+    
+    def _clear_camera_checkboxes(self):
+        """Очистить все чекбоксы камер"""
+        # Удаляем виджеты для прихода
+        for checkbox in self.arrival_camera_checks.values():
+            self.arrival_cameras_layout.removeWidget(checkbox)
+            checkbox.deleteLater()
+        self.arrival_camera_checks.clear()
+        
+        # Удаляем виджеты для ухода
+        for checkbox in self.departure_camera_checks.values():
+            self.departure_cameras_layout.removeWidget(checkbox)
+            checkbox.deleteLater()
+        self.departure_camera_checks.clear()
+    
+    def _get_available_cameras(self):
+        """
+        Получить список доступных камер из загруженных данных
+        
+        Returns:
+            dict: Словарь {camera_ip: camera_name}
+        """
+        try:
+            from services.data_loader import DataLoader
+            
+            # Получаем главное окно для доступа к state
+            main_window = self.window()
+            if not hasattr(main_window, 'state'):
+                return {}
+            
+            # Определяем источник данных
+            state = main_window.state
+            
+            if state.data_source_type == 'sqlite':
+                if not state.sqlite_path:
+                    return {}
+                data_source = state.sqlite_path
+                file_type = 'sqlite'
+            else:
+                if not state.files:
+                    return {}
+                data_source = state.files
+                file_type = None
+            
+            # Загружаем данные
+            df = DataLoader.load_logs(data_source, file_type=file_type)
+            
+            # Проверяем наличие колонок _device и _device_name
+            if '_device' not in df.columns:
+                return {}
+            
+            # Извлекаем уникальные камеры
+            cameras = {}
+            
+            if '_device_name' in df.columns:
+                # Создаём словарь IP -> Имя
+                unique_devices = (
+                    df[['_device', '_device_name']].drop_duplicates()
+                )
+                for _, row in unique_devices.iterrows():
+                    device_ip = row['_device']
+                    device_name = row['_device_name']
+                    if device_ip and str(device_ip) != 'nan':
+                        cameras[device_ip] = (
+                            device_name if device_name else device_ip
+                        )
+            else:
+                # Только IP адреса
+                unique_devices = df['_device'].dropna().unique()
+                for device_ip in unique_devices:
+                    cameras[device_ip] = device_ip
+            
+            return cameras
+            
+        except Exception as e:
+            print(f"Ошибка при получении списка камер: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+    
+    def get_device_mapping(self):
+        """
+        Получить текущую настройку device_mapping
+        
+        Returns:
+            dict | None: Словарь с arrival_devices и departure_devices или None
+        """
+        arrival_devices = [
+            ip for ip, checkbox in self.arrival_camera_checks.items()
+            if checkbox.isChecked()
+        ]
+        departure_devices = [
+            ip for ip, checkbox in self.departure_camera_checks.items()
+            if checkbox.isChecked()
+        ]
+        
+        # Если ничего не выбрано, возвращаем None (отключаем фильтрацию)
+        if not arrival_devices and not departure_devices:
+            return None
+        
+        return {
+            'arrival_devices': arrival_devices,
+            'departure_devices': departure_devices
+        }
+    
+    def set_device_mapping(self, device_mapping):
+        """
+        Установить device_mapping в UI
+        
+        Args:
+            device_mapping: dict с ключами arrival_devices и departure_devices
+        """
+        if not device_mapping:
+            return
+        
+        arrival_devices = device_mapping.get('arrival_devices', [])
+        departure_devices = device_mapping.get('departure_devices', [])
+        
+        # Отмечаем соответствующие чекбоксы
+        for ip, checkbox in self.arrival_camera_checks.items():
+            checkbox.setChecked(ip in arrival_devices)
+        
+        for ip, checkbox in self.departure_camera_checks.items():
+            checkbox.setChecked(ip in departure_devices)
+

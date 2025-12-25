@@ -36,6 +36,10 @@ class AttendanceRecord:
     schedule_end: time
     expected_hours: float
     
+    # Пути к фото (для гиперссылок в Excel)
+    arrival_photo_path: Optional[str] = None
+    departure_photo_path: Optional[str] = None
+    
     # === Статусы (заполняются анализаторами) ===
     is_late: bool = False
     late_minutes: int = 0

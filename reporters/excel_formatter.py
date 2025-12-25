@@ -5,9 +5,10 @@
 """
 
 import openpyxl
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from utils import ExcelStyleFactory
+from utils.smart_colors import ColorCalculator
 from config import (
     SHEET_MAIN_REPORT,
     SHEET_SUSPICIOUS
@@ -17,15 +18,18 @@ from config import (
 class ExcelFormatter:
     """Форматирование Excel файлов"""
     
-    def __init__(self, filename: str, reporter):
+    def __init__(self, filename: str, reporter, color_scheme=None):
         """
         Args:
             filename: Путь к Excel файлу
             reporter: ExcelReporter с данными для форматирования
+            color_scheme: ColorScheme для умных цветов (опционально)
         """
         self.filename = filename
         self.reporter = reporter
         self.styles = ExcelStyleFactory.create_all_styles()
+        # Умные цвета с настраиваемой схемой
+        self.color_calc = ColorCalculator(color_scheme)
     
     def format_all(self):
         """Применение форматирования ко всем листам"""
@@ -208,46 +212,82 @@ class ExcelFormatter:
                     horizontal='center', vertical='center'
                 )
                 
+                # Применяем стиль гиперссылки к ячейкам с формулами
+                if (cell_in.value and
+                        isinstance(cell_in.value, str) and
+                        cell_in.value.startswith('=HYPERLINK')):
+                    cell_in.style = 'Hyperlink'
+
+                if (cell_out.value and
+                        isinstance(cell_out.value, str) and
+                        cell_out.value.startswith('=HYPERLINK')):
+                    cell_out.style = 'Hyperlink'
+                
                 # Применяем цвета по статусу
                 if status_key in status_matrix:
                     status = status_matrix[status_key]
                     is_workday = status.get('is_workday', True)
                     
-                    # Приоритет 1: Технические сбои (всегда)
+                    # Приоритет 1: Технические сбои (цвет ошибки из схемы)
                     if status['technical']:
-                        cell_in.fill = self.styles['technical_fill']
-                        cell_out.fill = self.styles['technical_fill']
+                        error_color = self.color_calc.scheme.error
+                        cell_in.fill = PatternFill(
+                            start_color=error_color,
+                            end_color=error_color,
+                            fill_type="solid"
+                        )
+                        cell_out.fill = PatternFill(
+                            start_color=error_color,
+                            end_color=error_color,
+                            fill_type="solid"
+                        )
                     
-                    # Для рабочих дней: стандартная логика
+                    # Для рабочих дней: умные цвета с градациями
                     elif is_workday:
-                        # Приоритет 2: Недоработки (весь день жёлтый)
-                        if status.get('underwork', False):
-                            cell_in.fill = self.styles['underwork_cell_fill']
-                            cell_out.fill = self.styles['underwork_cell_fill']
+                        # Получаем числовые значения
+                        late_min = status.get('late_minutes', 0)
+                        early_min = status.get('early_leave_minutes', 0)
+                        under_hrs = status.get('underwork_hours', 0)
+                        over_hrs = status.get('overtime_hours', 0)
                         
-                        # Приоритет 3: Опоздание (только приход жёлтый)
-                        elif status.get('late', False):
-                            cell_in.fill = self.styles['underwork_cell_fill']
-                            # Проверяем также ранний уход
-                            if status.get('early_leave', False):
-                                cell_out.fill = (
-                                    self.styles['underwork_cell_fill']
-                                )
+                        # Вычисляем умные цвета
+                        arrival_color, departure_color = (
+                            self.color_calc.calculate_combined_color(
+                                late_min, early_min, under_hrs, over_hrs
+                            )
+                        )
                         
-                        # Приоритет 4: Ранний уход (только уход жёлтый)
-                        elif status.get('early_leave', False):
-                            cell_out.fill = self.styles['underwork_cell_fill']
-                        
-                        # Приоритет 5: Переработка (зелёный)
-                        elif status.get('overtime', False):
-                            cell_in.fill = self.styles['overtime_cell_fill']
-                            cell_out.fill = self.styles['overtime_cell_fill']
+                        # Применяем цвета
+                        if arrival_color != "FFFFFF":
+                            cell_in.fill = PatternFill(
+                                start_color=arrival_color,
+                                end_color=arrival_color,
+                                fill_type="solid"
+                            )
+                        if departure_color != "FFFFFF":
+                            cell_out.fill = PatternFill(
+                                start_color=departure_color,
+                                end_color=departure_color,
+                                fill_type="solid"
+                            )
                     
                     # Для выходных дней: только переработка (зеленый)
                     else:
                         if status.get('overtime', False):
-                            cell_in.fill = self.styles['overtime_cell_fill']
-                            cell_out.fill = self.styles['overtime_cell_fill']
+                            over_hrs = status.get('overtime_hours', 0)
+                            color = self.color_calc.calculate_overtime_color(
+                                over_hrs
+                            )
+                            cell_in.fill = PatternFill(
+                                start_color=color,
+                                end_color=color,
+                                fill_type="solid"
+                            )
+                            cell_out.fill = PatternFill(
+                                start_color=color,
+                                end_color=color,
+                                fill_type="solid"
+                            )
                 
                 col_idx += 2
         

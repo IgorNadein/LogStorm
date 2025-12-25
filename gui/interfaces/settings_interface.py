@@ -4,13 +4,15 @@ Settings Interface - интерфейс настроек приложения
 
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QButtonGroup
+    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QButtonGroup,
+    QGridLayout
 )
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
 from qfluentwidgets import (
     CardWidget, PrimaryPushButton, PushButton, ListWidget, CheckBox,
     StrongBodyLabel, BodyLabel, LineEdit, InfoBar, InfoBarPosition,
-    RadioButton
+    RadioButton, ColorPickerButton, ScrollArea
 )
 
 
@@ -30,15 +32,24 @@ class SettingsInterface(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("settingsInterface")
         
-        self._initializing = True  # Флаг для предотвращения лишних сигналов
+        self._initializing = True
         
         # Главный layout
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Scroll Area для всего содержимого
+        scroll = ScrollArea(self)
+        scroll.setWidgetResizable(True)
+        
+        # Контейнер для содержимого
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(32, 32, 32, 32)
-        layout.setSpacing(20)
+        layout.setSpacing(16)  # Уменьшил отступы
         
         # Заголовок
-        title = StrongBodyLabel("Настройки анализа", self)
+        title = StrongBodyLabel("Настройки анализа", content)
         layout.addWidget(title)
         
         # === Карточка: Источник данных ===
@@ -190,14 +201,80 @@ class SettingsInterface(QWidget):
         
         layout.addWidget(options_card)
         
+        # === Карточка: Цветовая схема (КОМПАКТНАЯ) ===
+        colors_card = CardWidget(content)
+        colors_layout = QVBoxLayout(colors_card)
+        colors_layout.setSpacing(8)
+        
+        # Заголовок с кнопкой сброса
+        colors_header = QHBoxLayout()
+        colors_title = StrongBodyLabel("Цвета отчетов")
+        colors_header.addWidget(colors_title)
+        colors_header.addStretch()
+        
+        self.reset_colors_btn = PushButton("Сброс к дефолту")
+        self.reset_colors_btn.setFixedHeight(28)
+        self.reset_colors_btn.clicked.connect(self._reset_colors)
+        colors_header.addWidget(self.reset_colors_btn)
+        colors_layout.addLayout(colors_header)
+        
+        # Компактная сетка в одну строку
+        colors_grid = QGridLayout()
+        colors_grid.setSpacing(12)
+        colors_grid.setContentsMargins(0, 0, 0, 0)
+        
+        # Одна строка с 5 цветами
+        # Нейтральный
+        colors_grid.addWidget(BodyLabel("Норма"), 0, 0)
+        self.neutral_picker = ColorPickerButton(
+            QColor("#FFFFFF"), "", colors_card
+        )
+        self.neutral_picker.setFixedSize(60, 28)
+        colors_grid.addWidget(self.neutral_picker, 1, 0)
+        
+        # Недоработка
+        colors_grid.addWidget(BodyLabel("Недораб."), 0, 1)
+        self.warning_picker = ColorPickerButton(
+            QColor("#FFA500"), "", colors_card
+        )
+        self.warning_picker.setFixedSize(60, 28)
+        colors_grid.addWidget(self.warning_picker, 1, 1)
+        
+        # Техсбой
+        colors_grid.addWidget(BodyLabel("Техсбой"), 0, 2)
+        self.error_picker = ColorPickerButton(
+            QColor("#FF0000"), "", colors_card
+        )
+        self.error_picker.setFixedSize(60, 28)
+        colors_grid.addWidget(self.error_picker, 1, 2)
+        
+        # Переработка
+        colors_grid.addWidget(BodyLabel("Перераб."), 0, 3)
+        self.success_picker = ColorPickerButton(
+            QColor("#00B050"), "", colors_card
+        )
+        self.success_picker.setFixedSize(60, 28)
+        colors_grid.addWidget(self.success_picker, 1, 3)
+        
+        # Опоздание/Уход
+        colors_grid.addWidget(BodyLabel("Опозд./Уход"), 0, 4)
+        self.info_picker = ColorPickerButton(
+            QColor("#FFFF00"), "", colors_card
+        )
+        self.info_picker.setFixedSize(60, 28)
+        colors_grid.addWidget(self.info_picker, 1, 4)
+        
+        colors_layout.addLayout(colors_grid)
+        layout.addWidget(colors_card)
+        
         # Кнопки действий
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(8)
         
-        self.save_config_btn = PushButton("Сохранить конфигурацию", self)
+        self.save_config_btn = PushButton("Сохранить конфигурацию", content)
         self.save_config_btn.setMinimumHeight(36)
         
-        self.apply_btn = PrimaryPushButton("Применить настройки", self)
+        self.apply_btn = PrimaryPushButton("Применить настройки", content)
         self.apply_btn.setMinimumHeight(36)
         
         actions_layout.addWidget(self.save_config_btn)
@@ -205,6 +282,11 @@ class SettingsInterface(QWidget):
         actions_layout.addStretch()
         
         layout.addLayout(actions_layout)
+        layout.addStretch()
+        
+        # Устанавливаем содержимое в scroll
+        scroll.setWidget(content)
+        main_layout.addWidget(scroll)
         
         # Подключение сигналов
         self.sqlite_radio.toggled.connect(self._on_source_changed)
@@ -215,8 +297,6 @@ class SettingsInterface(QWidget):
         
         # Завершение инициализации
         self._initializing = False
-        
-        layout.addStretch()
     
     def _on_source_changed(self):
         """Обработка изменения источника данных"""
@@ -316,3 +396,47 @@ class SettingsInterface(QWidget):
     def _clear_files(self):
         """Очистить список файлов"""
         self.files_list.clear()
+    
+    def _reset_colors(self):
+        """Сбросить цвета к дефолтным значениям"""
+        self.neutral_picker.setColor(QColor("#FFFFFF"))
+        self.warning_picker.setColor(QColor("#FFA500"))
+        self.error_picker.setColor(QColor("#FF0000"))
+        self.success_picker.setColor(QColor("#00B050"))
+        self.info_picker.setColor(QColor("#FFFF00"))
+        
+        InfoBar.success(
+            "Цвета сброшены",
+            "Цветовая схема сброшена к дефолтным значениям",
+            parent=self,
+            duration=2000,
+            position=InfoBarPosition.TOP_RIGHT
+        )
+    
+    def get_color_scheme_dict(self):
+        """
+        Получить текущую цветовую схему в виде словаря
+        
+        Returns:
+            dict: Словарь с цветами в HEX формате
+        """
+        return {
+            'neutral': self.neutral_picker.color.name()[1:].upper(),
+            'warning': self.warning_picker.color.name()[1:].upper(),
+            'error': self.error_picker.color.name()[1:].upper(),
+            'success': self.success_picker.color.name()[1:].upper(),
+            'info': self.info_picker.color.name()[1:].upper()
+        }
+    
+    def set_color_scheme(self, scheme):
+        """
+        Установить цветовую схему из ColorScheme
+        
+        Args:
+            scheme: ColorScheme объект
+        """
+        self.neutral_picker.setColor(QColor(f"#{scheme.neutral}"))
+        self.warning_picker.setColor(QColor(f"#{scheme.warning}"))
+        self.error_picker.setColor(QColor(f"#{scheme.error}"))
+        self.success_picker.setColor(QColor(f"#{scheme.success}"))
+        self.info_picker.setColor(QColor(f"#{scheme.info}"))

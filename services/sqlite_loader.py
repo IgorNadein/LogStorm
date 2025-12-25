@@ -67,6 +67,9 @@ class SQLiteLoader:
         if df.empty:
             return df
         
+        # Распаковка JSON из event_data
+        df = self._unpack_event_data(df)
+        
         # Преобразование типов для совместимости с AttendanceService
         df['timestamp'] = pd.to_datetime(df['time'])
         df['date'] = df['timestamp'].dt.date
@@ -96,6 +99,44 @@ class SQLiteLoader:
         # Распаковываем person_id и display_name
         df['name'] = [data[0] for data in mapping_data]
         df['display_name'] = [data[1] for data in mapping_data]
+        
+        return df
+    
+    def _unpack_event_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Распаковка JSON из колонки event_data
+        
+        Извлекает важные поля из JSON (включая _imagePath)
+        и добавляет их как отдельные колонки
+        """
+        import json
+        
+        def extract_fields(event_data_json: str) -> dict:
+            """Извлечь нужные поля из JSON"""
+            try:
+                data = json.loads(event_data_json)
+                return {
+                    '_imagePath': data.get('_imagePath'),
+                    '_device': data.get('_device'),
+                    '_device_name': data.get('_device_name'),
+                    'pictureURL': data.get('pictureURL')
+                }
+            except (json.JSONDecodeError, TypeError):
+                return {
+                    '_imagePath': None,
+                    '_device': None,
+                    '_device_name': None,
+                    'pictureURL': None
+                }
+        
+        # Извлекаем поля из JSON
+        extracted = df['event_data'].apply(extract_fields)
+        
+        # Добавляем как новые колонки
+        df['_imagePath'] = [row['_imagePath'] for row in extracted]
+        df['_device'] = [row['_device'] for row in extracted]
+        df['_device_name'] = [row['_device_name'] for row in extracted]
+        df['pictureURL'] = [row['pictureURL'] for row in extracted]
         
         return df
     

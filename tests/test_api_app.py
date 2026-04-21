@@ -1,4 +1,5 @@
 from collector.storage import EventStorage
+from core import LogStormCore
 from fastapi.testclient import TestClient
 
 from api.app import create_app
@@ -163,6 +164,33 @@ def test_attendance_analyze_default_schedule_can_be_configured_by_env(
         _event(serial=2, timestamp="2026-04-20T19:00:00"),
     ])
     client = TestClient(create_app(db_path=str(sqlite_path)))
+
+    response = client.post("/attendance/analyze", json=_payload_without_schedule())
+
+    assert response.status_code == 200
+    record = response.json()["records"][0]
+    assert record["schedule_start"] == "10:00"
+    assert record["schedule_end"] == "19:00"
+    assert record["expected_hours"] == 8
+
+
+def test_attendance_analyze_can_use_explicit_core_settings(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(serial=1, timestamp="2026-04-20T10:00:00"),
+        _event(serial=2, timestamp="2026-04-20T19:00:00"),
+    ])
+    core = LogStormCore.from_sources(
+        env={
+            "LOGSTORM_DEFAULT_START_TIME": "10:00",
+            "LOGSTORM_DEFAULT_END_TIME": "19:00",
+            "LOGSTORM_DEFAULT_EXPECTED_HOURS": "8",
+            "LOGSTORM_DEFAULT_WORKDAYS": "Monday",
+        },
+        collector_db_path=str(sqlite_path),
+    )
+    client = TestClient(create_app(core=core))
 
     response = client.post("/attendance/analyze", json=_payload_without_schedule())
 

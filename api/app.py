@@ -2,16 +2,14 @@
 # -*- coding: utf-8 -*-
 """FastAPI application for LogStorm attendance analysis."""
 
-import os
 from datetime import date
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from config import DEFAULT_SCHEDULE
+from core import LogStormCore
 from services import AttendanceAnalysisRequest, EusrrAttendanceService
-from services.collector_event_repository import CollectorEventRepository
 from services.logscam_loader import LogsCamLoader
 
 
@@ -40,54 +38,22 @@ class AttendanceAnalyzePayload(BaseModel):
     display_name: Optional[str] = None
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.lower() in {"1", "true", "yes", "on"}
-
-
-def _default_schedule_payload() -> dict:
-    return {
-        "start_time": os.getenv(
-            "LOGSTORM_DEFAULT_START_TIME",
-            DEFAULT_SCHEDULE["start_time"],
-        ),
-        "end_time": os.getenv(
-            "LOGSTORM_DEFAULT_END_TIME",
-            DEFAULT_SCHEDULE["end_time"],
-        ),
-        "expected_hours": float(os.getenv(
-            "LOGSTORM_DEFAULT_EXPECTED_HOURS",
-            str(DEFAULT_SCHEDULE["work_hours"]),
-        )),
-        "workdays": [
-            item.strip()
-            for item in os.getenv(
-                "LOGSTORM_DEFAULT_WORKDAYS",
-                ",".join(DEFAULT_SCHEDULE["workdays"]),
-            ).split(",")
-            if item.strip()
-        ],
-        "date_overrides": [],
-    }
-
-
 def create_app(
     db_path: Optional[str] = None,
     api_token: Optional[str] = None,
+    core: Optional[LogStormCore] = None,
 ) -> FastAPI:
     """Create a LogStorm API app with explicit or env-based settings."""
+    runtime = core or LogStormCore.from_sources(
+        collector_db_path=db_path,
+        api_token=api_token,
+    )
     app = FastAPI(title="LogStorm API", version="0.1.0")
-    app.state.db_path = db_path or os.getenv(
-        "LOGSTORM_COLLECTOR_DB_PATH", "events.db"
-    )
-    app.state.api_token = (
-        api_token if api_token is not None
-        else os.getenv("LOGSTORM_API_TOKEN", "")
-    )
-    app.state.allow_default_schedule = _env_bool(
-        "LOGSTORM_ALLOW_DEFAULT_SCHEDULE", True
+    app.state.core = runtime
+    app.state.db_path = runtime.settings.api.collector_db_path
+    app.state.api_token = runtime.settings.api.api_token
+    app.state.allow_default_schedule = (
+        runtime.settings.api.allow_default_schedule
     )
 
     def require_token(authorization: Optional[str] = Header(default=None)):
@@ -117,10 +83,10 @@ def create_app(
                         "LOGSTORM_ALLOW_DEFAULT_SCHEDULE=false"
                     ),
                 )
-            data["schedule"] = _default_schedule_payload()
+            data["schedule"] = app.state.core.default_schedule_payload()
 
         request = AttendanceAnalysisRequest.from_dict(data)
-        repository = CollectorEventRepository(app.state.db_path)
+        repository = app.state.core.collector_repository()
         raw_events = repository.load_raw_events(
             start=request.period_start.isoformat(),
             end=f"{request.period_end.isoformat()}T23:59:59",

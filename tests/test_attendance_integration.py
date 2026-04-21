@@ -4,7 +4,7 @@ from datetime import date
 import pandas as pd
 
 from collector.storage import EventStorage
-from services import AttendanceAnalysisRequest, DataLoader, EusrrAttendanceService
+from analyzer import AttendanceAnalysisRequest, DataLoader, EusrrAttendanceService
 
 
 def _collector_event(employee_id, serial, timestamp):

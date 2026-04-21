@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services import DataLoader, PersonMapper, AttendanceService
-from reporters import SummaryReporter, ExcelReporter
+from analyzer import DataLoader, PersonMapper, AttendanceService
+from analyzer.reporters import SummaryReporter, ExcelReporter
 from config import PERSON_MAPPING_FILE
 
 try:

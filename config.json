@@ -1,8 +1,0 @@
-{
-  "files": [
-    "//172.11.1.254/Face_ID/logs/events.ndjson"
-  ],
-  "verbose": true,
-  "prefs_file": "\\\\172.11.1.254\\Face_ID\\person.json",
-  "export_dir": "reports"
-}

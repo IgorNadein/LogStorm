@@ -1,19 +1,20 @@
-"""
-Сервисы бизнес-логики для LogStorm
+"""Compatibility exports for analyzer services.
+
+New code should import from ``analyzer``.
 """
 
-from .data_loader import DataLoader
-from .attendance_service import AttendanceService
-from .collector_event_repository import CollectorEventRepository
-from .eusrr_attendance_service import (
+from analyzer import (
     AttendanceAnalysisRequest,
     AttendanceAnalysisResponse,
+    AttendanceService,
+    DataLoader,
     EusrrAttendanceService,
+    PersonIndex,
+    PersonMapper,
+    PersonRepository,
     attendance_record_to_dict,
 )
-from .person_mapper import PersonMapper
-from .person_repository import PersonRepository
-from .person_index import PersonIndex
+from .collector_event_repository import CollectorEventRepository
 
 __all__ = [
     'DataLoader',

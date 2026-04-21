@@ -13,12 +13,15 @@ python main.py
 | Файл | Назначение |
 | --- | --- |
 | `main.py` | CLI smoke/integration запуск core анализа |
-| `config/paths.py` | Дефолтные пути к данным, маппингу и отчету |
+| `core/settings.py` | Единый Python settings module |
 | `person.json` | Маппинг сотрудников и aliases |
 | `collector/collector.py` | Сборщик событий СКУД |
 | `collector/storage.py` | NDJSON + SQLite хранилище |
-| `models/collector_event.py` | SQLAlchemy ORM-модели collector DB |
-| `services/collector_event_repository.py` | Repository для чтения collector DB |
+| `core/models/collector.py` | SQLAlchemy ORM-модели collector DB |
+| `core/repositories/collector_events.py` | Repository для чтения collector DB |
+| `api/app.py` | FastAPI app factory и маршруты |
+| `api/schemas.py` | Pydantic DTO HTTP API |
+| `api/auth.py` | Auth dependency для HTTP API |
 | `tools/export/export_acs_events.py` | Ручной экспорт событий из устройства |
 | `run_gui.py` | GUI entrypoint, сейчас paused/experimental |
 
@@ -26,11 +29,9 @@ python main.py
 
 | Папка | Содержимое |
 | --- | --- |
-| `services/` | `DataLoader`, `AttendanceService`, `PersonMapper`, repository/index |
-| `analyzers/` | Статусы и технические сбои |
-| `validators/` | Массовые отсутствия и проверки времени |
-| `reporters/` | Excel-отчет и консольная сводка |
-| `models/` | `AttendanceRecord`, `WorkSchedule` |
+| `analyzer/` | `DataLoader`, `AttendanceService`, EUSRR contract, статусы, валидаторы, отчеты |
+| `core/` | Settings, shared models, repositories |
+| `services/`, `analyzers/`, `validators/`, `reporters/`, `models/` | Compatibility wrappers |
 | `collector/` | Фоновый сбор событий и storage |
 | `data/` | Локальные CSV/NDJSON данные для проверок |
 | `tests/` | Pytest-проверки всех активных слоев |
@@ -40,14 +41,13 @@ python main.py
 
 | Задача | Файл |
 | --- | --- |
-| Настроить дефолтные пути | `config/paths.py` |
-| Настроить пороги анализа | `config/analysis.py` |
-| Проверить CSV/NDJSON загрузку | `services/data_loader.py` |
-| Проверить маппинг сотрудников | `services/person_mapper.py` |
-| Проверить анализ посещаемости | `services/attendance_service.py` |
+| Настроить runtime | `core/settings.py` |
+| Проверить CSV/NDJSON загрузку | `analyzer/data_loader.py` |
+| Проверить маппинг сотрудников | `analyzer/person_mapper.py` |
+| Проверить анализ посещаемости | `analyzer/service.py` |
 | Проверить collector storage | `collector/storage.py` |
 | Проверить collector API | `collector/collector.py` |
-| Проверить SQLite чтение анализатором | `services/collector_event_repository.py` + `services/data_loader.py` |
+| Проверить SQLite чтение анализатором | `core/repositories/collector_events.py` + `analyzer/data_loader.py` |
 | Обновить тестовые ожидания | `tests/` |
 
 ## Статусы

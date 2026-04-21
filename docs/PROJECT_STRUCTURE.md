@@ -5,8 +5,9 @@
 ```text
 LogStorm/
 ├── main.py
-├── config/
+├── analyzer/
 ├── core/
+├── config/
 ├── services/
 ├── analyzers/
 ├── validators/
@@ -21,19 +22,28 @@ LogStorm/
 
 ## Точки входа
 
-- `main.py` - CLI запуск анализа по дефолтным путям из `config/paths.py`.
+- `main.py` - CLI запуск анализа по дефолтным путям из `core/settings.py`.
 - `collector/collector.py` - фоновый или однократный сбор событий СКУД.
 - `tools/export/export_acs_events.py` - ручной экспорт событий из устройства.
 - `run_gui.py` - GUI entrypoint, сейчас не является частью основного тестового контура.
 
 ## Конфигурация
 
-- `core/` - runtime core, который объединяет дефолты из `config/*`, env-настройки API и entrypoint context.
-- `config/paths.py` - `data/attendance.csv`, optional mapping path, `reports/attendance_report.xlsx`.
-- `config/analysis.py` - рабочий график и пороги анализа.
+- `core/settings.py` - единый Python settings module для API, CLI, collector и analyzer.
+- `config/*` - legacy/default compatibility layer, постепенно выводится из активного контура.
 - `config/formatting.py` - Excel-цвета и имена листов.
 - `config/localization.py` - локализация дней и месяцев.
-- `config.json` - пользовательские GUI-настройки, не источник истины для core CLI/API.
+- `config.json` - локальные пользовательские GUI-настройки, не хранится в Git и не является источником истины для core CLI/API/collector.
+
+## Активные приложения
+
+- `core/` - общие настройки, модели и repositories.
+- `analyzer/` - бизнес-логика посещаемости.
+- `collector/` - сбор событий и запись в NDJSON/SQLite.
+- `api/` - FastAPI transport.
+- `gui/` - paused/experimental.
+
+`services/`, `analyzers/`, `validators/`, `reporters/`, `models/` оставлены как compatibility wrappers для старых импортов.
 
 ## Данные
 

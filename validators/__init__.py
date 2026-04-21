@@ -1,8 +1,8 @@
-"""
-Валидаторы данных для LogStorm
+"""Compatibility exports for analyzer validators.
+
+New code should import from ``analyzer.validators``.
 """
 
-from .time_validator import TimeValidator
-from .absence_validator import AbsenceValidator
+from analyzer.validators import AbsenceValidator, TimeValidator
 
 __all__ = ['TimeValidator', 'AbsenceValidator']

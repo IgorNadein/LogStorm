@@ -7,7 +7,7 @@
 
 import sys
 import json
-from services import PersonMapper
+from analyzer import PersonMapper
 from config import PERSON_MAPPING_FILE
 
 

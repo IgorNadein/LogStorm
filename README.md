@@ -9,10 +9,10 @@ LogStorm анализирует логи посещаемости сотрудн
 - Core CLI: `main.py`
 - Данные для локального smoke/integration прогона: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
 - Маппинг сотрудников для NDJSON: `person.json`
-- Конфигурация по умолчанию: `config/paths.py`, `config/analysis.py`, `config/formatting.py`, `config/localization.py`
-- Runtime core: `core/` объединяет источники настроек для API, CLI и будущих entrypoint.
+- Runtime core: `core/settings.py` объединяет настройки API, CLI, collector и analyzer.
+- Analyzer app: `analyzer/` содержит загрузку данных, маппинг, анализ, валидаторы и отчеты.
 - Collector: `collector/collector.py`, `collector/storage.py`
-- SQLAlchemy ORM-модели collector storage: `models/collector_event.py`
+- Shared models/repositories: `core/models/`, `core/repositories/`
 - Экспорт из устройства: `tools/export/export_acs_events.py`
 - GUI: `run_gui.py`, `gui/` (paused/experimental)
 
@@ -63,7 +63,8 @@ python main.py
 - отчет: `reports/attendance_report.xlsx`.
 
 Эти значения задаются в `config/paths.py` и читаются через `LogStormCore`.
-`config.json` не используется core CLI/API-контуром и относится к paused GUI.
+`config.json` не используется core CLI/API/collector-контуром. Если paused GUI
+создает такой файл локально, он не должен попадать в Git.
 
 ## Runtime Core
 
@@ -105,7 +106,7 @@ NDJSON:
 SQLite collector DB:
 
 ```python
-from services import DataLoader, PersonMapper
+from analyzer import DataLoader, PersonMapper
 
 mapper = PersonMapper("person.json")
 df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
@@ -182,28 +183,34 @@ Collector собирает события СКУД и пишет их однов
 
 ```bash
 python collector/collector.py --init
-python collector/collector.py --config collector/collector.example.json --once
+python collector/collector.py --config collector/collector.local.py --once
 ```
 
 В тестах сетевой доступ не требуется: collector проверяется через конфигурацию, состояние, дедупликацию и локальное хранилище.
 
+Collector config теперь Python-файл с верхнеуровневым словарем `CONFIG`.
+JSON-конфиги читаются только для обратной совместимости.
+
 ## Структура
+
+Подробное описание архитектурных границ: `docs/ARCHITECTURE.md`.
 
 ```text
 LogStorm/
-├── analyzers/          # анализ статусов и технических сбоев
+├── analyzer/           # анализ посещаемости, загрузчики, валидаторы, отчеты
+├── analyzers/          # compatibility wrappers для старых импортов
 ├── collector/          # сборщик событий и storage
 ├── config/             # настройки проекта
-├── core/               # runtime core и единый доступ к настройкам
+├── core/               # настройки, общие модели и repositories
 ├── data/               # локальные тестовые/примерные данные
 ├── gui/                # GUI paused/experimental
-├── models/             # AttendanceRecord, WorkSchedule
-├── reporters/          # Excel и текстовая сводка
-├── services/           # DataLoader, AttendanceService, PersonMapper
+├── models/             # compatibility wrappers для core.models
+├── reporters/          # compatibility wrappers для analyzer.reporters
+├── services/           # compatibility wrappers для analyzer/core repositories
 ├── tests/              # pytest-контур
 ├── tools/export/       # экспорт событий из устройства
 ├── utils/              # даты, Excel helpers, исключения, логирование
-└── validators/         # проверки отсутствий и времени
+└── validators/         # compatibility wrappers для analyzer.validators
 ```
 
 ## Что сейчас не является приоритетом

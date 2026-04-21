@@ -1,8 +1,8 @@
-"""
-Анализаторы статусов для LogStorm
+"""Compatibility exports for analyzer status modules.
+
+New code should import from ``analyzer``.
 """
 
-from .status_analyzer import StatusAnalyzer
-from .technical_analyzer import TechnicalIssueAnalyzer
+from analyzer import StatusAnalyzer, TechnicalIssueAnalyzer
 
 __all__ = ['StatusAnalyzer', 'TechnicalIssueAnalyzer']

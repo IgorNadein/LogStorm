@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QSize, QSettings
 from PySide6.QtGui import QFont, QIcon, QPalette, QColor
 
-from services import DataLoader, AttendanceService, PersonMapper
-from reporters import SummaryReporter, ExcelReporter, ExcelFormatter
+from analyzer import AttendanceService, DataLoader, PersonMapper
+from analyzer.reporters import ExcelFormatter, ExcelReporter, SummaryReporter
 
 try:
     from dotenv import load_dotenv

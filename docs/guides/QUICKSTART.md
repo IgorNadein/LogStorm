@@ -24,7 +24,7 @@ logs_file = "events.db"
 или напрямую:
 
 ```python
-from services import DataLoader, PersonMapper
+from analyzer import DataLoader, PersonMapper
 
 mapper = PersonMapper("person.json")
 df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)

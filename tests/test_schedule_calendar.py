@@ -2,7 +2,7 @@ from datetime import date, time
 
 import pytest
 
-from models import WorkSchedule
+from core.models import WorkSchedule
 
 
 def _schedule(overrides=None):

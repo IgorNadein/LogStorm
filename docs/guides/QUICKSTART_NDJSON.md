@@ -8,7 +8,7 @@
 Пример использования:
 
 ```python
-from services import DataLoader, PersonMapper
+from analyzer import DataLoader, PersonMapper
 
 mapper = PersonMapper("person.json")
 df = DataLoader.load_logs(

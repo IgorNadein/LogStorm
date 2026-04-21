@@ -2,12 +2,12 @@ import sqlite3
 
 import pytest
 
-from services import (
+from analyzer import (
     AttendanceAnalysisRequest,
     DataLoader,
     EusrrAttendanceService,
-    CollectorEventRepository,
 )
+from core.repositories import CollectorEventRepository
 
 
 @pytest.mark.realdb

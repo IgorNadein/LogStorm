@@ -4,9 +4,9 @@ import pandas as pd
 import pytest
 
 from config import LOGS_FILE, PERSON_MAPPING_FILE, OUTPUT_EXCEL_FILE
-from reporters import ExcelReporter
-from services import AttendanceService, DataLoader, PersonMapper
-from validators.absence_validator import AbsenceValidator
+from analyzer.reporters import ExcelReporter
+from analyzer import AttendanceService, DataLoader, PersonMapper
+from analyzer.validators.absence import AbsenceValidator
 
 
 def test_public_config_points_to_existing_sample_data():

@@ -1,9 +1,8 @@
-"""
-Репортеры для генерации отчётов LogStorm
+"""Compatibility exports for analyzer reporters.
+
+New code should import from ``analyzer.reporters``.
 """
 
-from .excel_reporter import ExcelReporter
-from .excel_formatter import ExcelFormatter
-from .summary_reporter import SummaryReporter
+from analyzer.reporters import ExcelFormatter, ExcelReporter, SummaryReporter
 
 __all__ = ['SummaryReporter', 'ExcelReporter', 'ExcelFormatter']

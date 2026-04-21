@@ -353,8 +353,8 @@ tests/
 ```python
 # tests/unit/test_analyzers.py
 import pytest
-from analyzers import StatusAnalyzer
-from models import AttendanceRecord
+from analyzer import StatusAnalyzer
+from core.models import AttendanceRecord
 
 def test_analyze_late_workday():
     """Тест опоздания в рабочий день"""

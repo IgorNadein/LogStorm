@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime
 
@@ -17,20 +16,32 @@ from collector.storage import EventStorage
 
 
 def test_load_config_returns_default_when_missing(tmp_path):
-    config = load_config(str(tmp_path / "missing.json"))
+    config = load_config(str(tmp_path / "missing.py"))
 
     assert config["request"]["page_size"] == DEFAULT_CONFIG["request"]["page_size"]
     assert config["devices"][0]["host"] == "192.168.1.101"
 
 
-def test_save_default_config_writes_json(tmp_path):
-    config_path = tmp_path / "collector.json"
+def test_save_default_config_writes_python_config(tmp_path):
+    config_path = tmp_path / "collector.local.py"
 
     save_default_config(str(config_path))
 
-    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    saved = load_config(str(config_path))
     assert saved["interval_minutes"] == DEFAULT_CONFIG["interval_minutes"]
     assert "devices" in saved
+
+
+def test_load_config_keeps_json_compatibility(tmp_path):
+    config_path = tmp_path / "collector.json"
+    config_path.write_text(
+        '{"request": {"page_size": 77}, "devices": []}',
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["request"]["page_size"] == 77
 
 
 def test_build_request_conditions_extends_end_time_and_uses_request_config():

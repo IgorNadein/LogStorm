@@ -2,8 +2,8 @@ import json
 import sqlite3
 
 from collector.storage import EventStorage
-from services.collector_event_repository import CollectorEventRepository
-from services import DataLoader, PersonMapper
+from core.repositories import CollectorEventRepository
+from analyzer import DataLoader, PersonMapper
 
 
 def _event(device="door-1", serial=1, name="Employee Sample"):

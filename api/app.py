@@ -2,40 +2,15 @@
 # -*- coding: utf-8 -*-
 """FastAPI application for LogStorm attendance analysis."""
 
-from datetime import date
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, HTTPException, status
 
 from core import LogStormCore
-from services import AttendanceAnalysisRequest, EusrrAttendanceService
-from services.logscam_loader import LogsCamLoader
-
-
-class DateOverridePayload(BaseModel):
-    date: date
-    is_workday: bool
-    reason: str = ""
-    start_time: Optional[str] = None
-    end_time: Optional[str] = None
-    expected_hours: Optional[float] = None
-
-
-class SchedulePayload(BaseModel):
-    start_time: str
-    end_time: str
-    expected_hours: float
-    workdays: list[str] = Field(default_factory=list)
-    date_overrides: list[DateOverridePayload] = Field(default_factory=list)
-
-
-class AttendanceAnalyzePayload(BaseModel):
-    employee_id: str
-    period_start: date
-    period_end: date
-    schedule: Optional[SchedulePayload] = None
-    display_name: Optional[str] = None
+from analyzer import AttendanceAnalysisRequest, EusrrAttendanceService
+from analyzer.logscam_loader import LogsCamLoader
+from api.auth import require_token
+from api.schemas import AttendanceAnalyzePayload
 
 
 def create_app(
@@ -55,17 +30,6 @@ def create_app(
     app.state.allow_default_schedule = (
         runtime.settings.api.allow_default_schedule
     )
-
-    def require_token(authorization: Optional[str] = Header(default=None)):
-        token = app.state.api_token
-        if not token:
-            return
-        expected = f"Bearer {token}"
-        if authorization != expected:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid LogStorm API token",
-            )
 
     @app.get("/health")
     def health():

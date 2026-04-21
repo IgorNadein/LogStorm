@@ -37,6 +37,25 @@ def test_core_reads_api_settings_from_env():
     assert settings.api.default_schedule["end_time"] == "19:00"
     assert settings.api.default_schedule["expected_hours"] == 8.0
     assert settings.api.default_schedule["workdays"] == ["Monday", "Saturday"]
+    assert settings.collector.sqlite_path == "/tmp/events.db"
+
+
+def test_core_builds_collector_settings_from_env():
+    settings = build_settings(env={
+        "LOGSTORM_COLLECTOR_DB_PATH": "/tmp/events.db",
+        "LOGSTORM_COLLECTOR_NDJSON_PATH": "/tmp/events.ndjson",
+        "LOGSTORM_COLLECTOR_LOG_FILE": "/tmp/collector.log",
+        "LOGSTORM_COLLECTOR_INTERVAL_MINUTES": "5",
+        "LOGSTORM_COLLECTOR_MAX_PARALLEL": "2",
+        "LOGSTORM_COLLECTOR_INITIAL_DAYS": "7",
+    })
+
+    assert settings.collector.sqlite_path == "/tmp/events.db"
+    assert settings.collector.ndjson_path == "/tmp/events.ndjson"
+    assert settings.collector.log_file == "/tmp/collector.log"
+    assert settings.collector.interval_minutes == 5
+    assert settings.collector.max_parallel == 2
+    assert settings.collector.initial_days == 7
 
 
 def test_core_explicit_api_settings_override_env():

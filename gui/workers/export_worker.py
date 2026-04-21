@@ -4,7 +4,7 @@ Export Worker - выполняет экспорт в Excel в отдельном
 
 from PySide6.QtCore import QThread, Signal
 
-from reporters.excel_reporter import ExcelReporter
+from analyzer.reporters import ExcelReporter
 
 
 class ExportWorker(QThread):

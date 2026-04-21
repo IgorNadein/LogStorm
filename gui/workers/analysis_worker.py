@@ -5,9 +5,7 @@ Analysis Worker - выполняет анализ посещаемости в о
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
-from services.data_loader import DataLoader
-from services.attendance_service import AttendanceService
-from services.person_mapper import PersonMapper
+from analyzer import AttendanceService, DataLoader, PersonMapper
 
 
 class AnalysisWorker(QThread):

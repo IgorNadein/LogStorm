@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services import DataLoader, PersonMapper
+from analyzer import DataLoader, PersonMapper
 
 NDJSON_FILES = ['data/vhod.ndjson', 'data/vihod.ndjson']
 MAPPING_FILE = 'person.json'

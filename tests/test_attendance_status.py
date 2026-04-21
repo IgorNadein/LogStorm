@@ -1,7 +1,7 @@
 from datetime import date, time
 
-from analyzers import StatusAnalyzer, TechnicalIssueAnalyzer
-from models import AttendanceRecord
+from analyzer import StatusAnalyzer, TechnicalIssueAnalyzer
+from core.models import AttendanceRecord
 
 
 def _record(

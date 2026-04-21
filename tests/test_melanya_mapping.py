@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services.person_mapper import PersonMapper
+from analyzer.person_mapper import PersonMapper
 
 def test_melanya_mapping():
     print("=" * 60)

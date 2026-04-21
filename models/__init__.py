@@ -1,10 +1,16 @@
-"""
-Модели данных для LogStorm
+"""Compatibility exports for shared LogStorm models.
+
+New code should import from ``core.models``.
 """
 
-from .attendance_record import AttendanceRecord
-from .collector_event import Base, CollectorEvent, CollectorState
-from .work_schedule import ScheduleDateOverride, WorkSchedule
+from core.models import (
+    AttendanceRecord,
+    Base,
+    CollectorEvent,
+    CollectorState,
+    ScheduleDateOverride,
+    WorkSchedule,
+)
 
 __all__ = [
     'AttendanceRecord',

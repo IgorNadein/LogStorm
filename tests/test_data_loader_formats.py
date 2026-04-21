@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from collector.storage import EventStorage
-from services import DataLoader
+from analyzer import DataLoader
 
 
 def _collector_event(employee_id="001", serial=1, timestamp="2026-04-20T09:00:00"):

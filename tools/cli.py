@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """LogStorm - Refactored"""
 
-from services import DataLoader, AttendanceService
-from reporters import SummaryReporter, ExcelReporter
+from analyzer import AttendanceService, DataLoader
+from analyzer.reporters import ExcelReporter, SummaryReporter
 from config import LOGS_FILE, PERSON_MAPPING_FILE, OUTPUT_EXCEL_FILE
 
 try:
@@ -28,7 +28,7 @@ class LogStormApp:
         # Профили теперь опциональны
         import os
         if PERSON_MAPPING_FILE and os.path.exists(PERSON_MAPPING_FILE):
-            from services import PersonMapper
+            from analyzer import PersonMapper
             mapper = PersonMapper(PERSON_MAPPING_FILE)
             prefs = mapper.convert_to_prefs_format()
         else:

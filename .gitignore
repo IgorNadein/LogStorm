@@ -4,7 +4,9 @@
 .env
 *.env
 secrets.json
+config.json
 config.local.json
+collector.local.py
 
 # Результаты работы
 attendance_report.xlsx
@@ -69,6 +71,7 @@ reports/
 
 # Collector (конфиг с паролями)
 collector/collector.json
+collector/collector.local.py
 collector/collector.log
 collector/collector_state.json
 collector/__pycache__/

@@ -144,5 +144,5 @@ def test_response_to_dict_is_api_serializable_shape():
 
     assert payload["employee_id"] == "100"
     assert payload["period_start"] == "2026-04-20"
-    assert payload["records"][0]["Дата"] == "2026-04-20"
-    assert payload["records"][0]["ID"] == "100"
+    assert payload["records"][0]["date"] == "2026-04-20"
+    assert payload["records"][0]["employee_id"] == "100"

@@ -27,9 +27,6 @@ from utils.exceptions import (  # noqa: E402
     ExportError,
     ExcelExportError,
     FileLockedError,
-    AIError,
-    AIConnectionError,
-    AIAuthError,
     DeviceError,
     DeviceConnectionError,
     DeviceAuthError
@@ -78,12 +75,6 @@ class TestExceptions:
         assert error.file_path == "report.xlsx"
         assert "Excel" in str(error)
     
-    def test_ai_auth_error(self):
-        """Тест ошибки авторизации AI"""
-        error = AIAuthError("GigaChat")
-        assert error.service == "GigaChat"
-        assert "авторизации" in str(error)
-    
     def test_device_connection_error(self):
         """Тест ошибки подключения к устройству"""
         error = DeviceConnectionError("192.168.1.1", 80)
@@ -97,7 +88,6 @@ class TestExceptions:
         assert issubclass(DataError, LogStormError)
         assert issubclass(AnalysisError, LogStormError)
         assert issubclass(ExportError, LogStormError)
-        assert issubclass(AIError, LogStormError)
         assert issubclass(DeviceError, LogStormError)
 
     def test_config_validation_error(self):
@@ -124,12 +114,6 @@ class TestExceptions:
         error = ExcelExportError("report.xlsx", "Недостаточно памяти")
         assert error.file_path == "report.xlsx"
         assert "Недостаточно памяти" in str(error)
-
-    def test_ai_connection_error(self):
-        """Тест ошибки подключения к AI"""
-        error = AIConnectionError("GigaChat")
-        assert error.service == "GigaChat"
-        assert "подключиться" in str(error)
 
     def test_device_auth_error(self):
         """Тест ошибки авторизации на устройстве"""

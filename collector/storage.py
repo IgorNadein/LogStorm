@@ -96,30 +96,34 @@ class EventStorage:
                     f.write(json.dumps(event, ensure_ascii=False) + '\n')
             
             # 2. Запись в SQLite (батчем)
-            conn = sqlite3.connect(self.sqlite_path)
-            try:
-                rows = []
-                for event in events:
-                    rows.append((
-                        event.get('_device', ''),
-                        event.get('serialNo', 0),
-                        event.get('time', ''),
-                        event.get('employeeNoString', ''),
-                        event.get('name', ''),
-                        json.dumps(event, ensure_ascii=False),
-                        event.get('_collected', '')
-                    ))
-                
-                conn.executemany(
-                    'INSERT OR REPLACE INTO events '
-                    '(device, serialNo, time, employeeNoString, name, '
-                    'event_data, collected_at) '
-                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    rows
-                )
-                conn.commit()
-            finally:
-                conn.close()
+            self._write_sqlite_events(events)
+    
+    def _write_sqlite_events(self, events: List[Dict[str, Any]]) -> None:
+        """Запись событий только в SQLite."""
+        conn = sqlite3.connect(self.sqlite_path)
+        try:
+            rows = []
+            for event in events:
+                rows.append((
+                    event.get('_device', ''),
+                    event.get('serialNo', 0),
+                    event.get('time', ''),
+                    event.get('employeeNoString', ''),
+                    event.get('name', ''),
+                    json.dumps(event, ensure_ascii=False),
+                    event.get('_collected', '')
+                ))
+            
+            conn.executemany(
+                'INSERT OR REPLACE INTO events '
+                '(device, serialNo, time, employeeNoString, name, '
+                'event_data, collected_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                rows
+            )
+            conn.commit()
+        finally:
+            conn.close()
     
     def update_collector_state(
         self, device: str, last_serial: int, last_collect: Optional[str] = None
@@ -267,7 +271,7 @@ class EventStorage:
                     count += 1
                     
                     if len(batch) >= batch_size:
-                        self.write_events(batch)
+                        self._write_sqlite_events(batch)
                         batch = []
                         
                         if progress_callback:
@@ -278,6 +282,6 @@ class EventStorage:
         
         # Запись остатка
         if batch:
-            self.write_events(batch)
+            self._write_sqlite_events(batch)
         
         return count

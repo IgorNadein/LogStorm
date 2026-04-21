@@ -9,9 +9,9 @@ from dataclasses import dataclass
 class PathsConfig:
     """Настройки путей к файлам"""
     
-    logs_file: str = 'logs/attendance.csv'
-    person_mapping_file: str = 'person_mapping.json'
-    output_excel_file: str = 'attendance_report.xlsx'
+    logs_file: str = 'data/attendance.csv'
+    person_mapping_file: str = ''
+    output_excel_file: str = 'reports/attendance_report.xlsx'
 
 
 # Глобальный экземпляр

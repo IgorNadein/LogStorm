@@ -14,7 +14,7 @@ def test_melanya_mapping():
     print("=" * 60)
     
     # Загружаем маппер
-    mapper = PersonMapper('person_mapping.json')
+    mapper = PersonMapper('person.json')
     
     print(f"\n[INFO] Загружено:")
     print(f"   - Маппингов: {len(mapper.mappings)}")
@@ -55,6 +55,10 @@ def test_melanya_mapping():
         print(f"   ❌ ПРОБЛЕМА: ID не объединяются!")
         print(f"      resolved_19 = '{resolved_19}'")
         print(f"      resolved_666 = '{resolved_666}'")
+    
+    assert resolved_19 == '19'
+    assert resolved_666 == '19'
+    assert display_19 == display_666
 
 if __name__ == '__main__':
     test_melanya_mapping()

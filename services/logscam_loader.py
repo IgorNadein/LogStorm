@@ -42,13 +42,15 @@ class LogsCamLoader:
         
         print(f"Загружено {len(events)} событий из NDJSON")
         
-        # Конвертация в DataFrame
+        return LogsCamLoader.load_events(events, person_mapper)
+
+    @staticmethod
+    def load_events(events: list[dict], person_mapper=None) -> pd.DataFrame:
+        """Load raw event dictionaries into a normalized DataFrame."""
         df = pd.DataFrame(events)
-        
-        # Нормализация
-        df = LogsCamLoader._normalize_events(df, person_mapper)
-        
-        return df
+        if df.empty:
+            return df
+        return LogsCamLoader._normalize_events(df, person_mapper)
     
     @staticmethod
     def _normalize_events(df: pd.DataFrame, person_mapper=None) -> pd.DataFrame:

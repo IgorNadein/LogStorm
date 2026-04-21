@@ -40,6 +40,8 @@ class AbsenceValidator:
             Множество дат с массовым отсутствием
         """
         mass_absence_dates = set()
+        if self.df.empty:
+            return mass_absence_dates
         
         # Диапазон дат для проверки
         min_date = self.df['date'].min()
@@ -90,13 +92,17 @@ class AbsenceValidator:
             Множество дат с критическим отсутствием
         """
         critical_absence_dates = set()
+        if self.df.empty:
+            return critical_absence_dates
         
         # Диапазон дат для проверки
         min_date = self.df['date'].min()
         max_date = self.df['date'].max()
         all_dates = pd.date_range(start=min_date, end=max_date, freq='D').date
         
-        total_users = len(self.prefs.keys())
+        total_users = len(self.prefs.keys()) or self.df['name'].nunique()
+        if total_users == 0:
+            return critical_absence_dates
         
         for curr_date in all_dates:
             # Подсчитываем присутствующих

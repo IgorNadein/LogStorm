@@ -16,11 +16,11 @@ class DataLoader:
     def load_logs(path, file_type: str = 'auto',
                   person_mapper=None) -> pd.DataFrame:
         """
-        Загрузка логов посещаемости из CSV или NDJSON
+        Загрузка логов посещаемости из CSV, NDJSON или SQLite
         
         Args:
             path: Путь к файлу (str) или список путей (list)
-            file_type: Тип файла ('csv', 'ndjson', 'auto')
+            file_type: Тип файла ('csv', 'ndjson', 'sqlite', 'auto')
             person_mapper: Опциональный PersonMapper для маппинга сотрудников
             
         Returns:
@@ -56,6 +56,8 @@ class DataLoader:
                 file_type = 'ndjson'
             elif ext == '.csv':
                 file_type = 'csv'
+            elif ext in ['.db', '.sqlite', '.sqlite3']:
+                file_type = 'sqlite'
             else:
                 # Попытка определить по содержимому
                 with open(path, 'r', encoding='utf-8') as f:
@@ -69,6 +71,16 @@ class DataLoader:
         if file_type == 'ndjson':
             from services.logscam_loader import LogsCamLoader
             df = LogsCamLoader.load_ndjson(path, person_mapper)
+            df = LogsCamLoader.filter_valid_passes(df)
+        elif file_type in ['sqlite', 'db']:
+            from services.collector_event_repository import (
+                CollectorEventRepository,
+            )
+            from services.logscam_loader import LogsCamLoader
+            repo = CollectorEventRepository(path)
+            events = repo.load_raw_events()
+            print(f"Загружено {len(events)} событий из SQLite")
+            df = LogsCamLoader.load_events(events, person_mapper)
             df = LogsCamLoader.filter_valid_passes(df)
         else:
             # CSV загрузка (оригинальная логика)
@@ -87,7 +99,7 @@ class DataLoader:
         
         Args:
             paths: Список путей к файлам
-            file_type: Тип файлов ('csv', 'ndjson', 'auto')
+            file_type: Тип файлов ('csv', 'ndjson', 'sqlite', 'auto')
             person_mapper: Опциональный PersonMapper для маппинга сотрудников
             
         Returns:

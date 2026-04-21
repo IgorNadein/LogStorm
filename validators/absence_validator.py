@@ -57,7 +57,7 @@ class AbsenceValidator:
             for user_name in self.prefs.keys():
                 user_prefs = self.prefs[user_name]
                 schedule = WorkSchedule.from_preferences(user_prefs)
-                if schedule.is_workday(weekday):
+                if schedule.is_workday(weekday, curr_date):
                     users_should_work += 1
             
             # Если это рабочий день хотя бы для кого-то

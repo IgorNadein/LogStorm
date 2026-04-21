@@ -2,9 +2,13 @@ import json
 import logging
 from datetime import datetime
 
+import pytest
+import requests
+
 from collector.collector import (
     DEFAULT_CONFIG,
     EventTracker,
+    fetch_events_from_device,
     build_request_conditions,
     load_config,
     save_default_config,
@@ -79,3 +83,203 @@ def test_setup_logging_does_not_crash(tmp_path):
 
     assert isinstance(logger, logging.Logger)
     assert logger.level == logging.DEBUG
+
+
+class _FakeResponse:
+    def __init__(self, status_code=200, payload=None, content_type="application/json"):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else {}
+        self.headers = {"Content-Type": content_type}
+
+    def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self, responses=None, exception=None):
+        self.responses = list(responses or [])
+        self.exception = exception
+        self.headers = {}
+        self.posts = []
+        self.closed = False
+
+    def post(self, url, **kwargs):
+        self.posts.append((url, kwargs))
+        if self.exception:
+            raise self.exception
+        return self.responses.pop(0)
+
+    def close(self):
+        self.closed = True
+
+
+def _logger():
+    logger = logging.getLogger("test_collector_api")
+    logger.handlers = []
+    logger.addHandler(logging.NullHandler())
+    return logger
+
+
+def _device():
+    return {
+        "host": "camera.local",
+        "name": "Entrance",
+        "user": "admin",
+        "password": "secret",
+        "save_images": False,
+    }
+
+
+def _config():
+    return {
+        "request": {"page_size": 30, "major": 5, "minor": 75, "timeout": 1},
+        "images": {"enabled": False},
+    }
+
+
+def _payload(events):
+    return {"AcsEvent": {"InfoList": events}}
+
+
+def test_fetch_events_success_and_empty_page(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload=_payload([
+            {
+                "serialNo": 10,
+                "time": "2026-04-20T09:00:00",
+                "employeeNoString": "100",
+            }
+        ])),
+        _FakeResponse(payload=_payload([])),
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=1,
+    )
+
+    assert result.completed is True
+    assert result.last_serial == 10
+    assert result.last_event_time == "2026-04-20T09:00:00"
+    assert len(result.events) == 1
+    assert session.posts[0][1]["json"]["AcsEventCond"]["beginSerialNo"] == 1
+    assert session.posts[1][1]["json"]["AcsEventCond"]["beginSerialNo"] == 11
+    assert session.closed is True
+
+
+def test_fetch_events_empty_first_page(monkeypatch):
+    session = _FakeSession([_FakeResponse(payload=_payload([]))])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=7,
+    )
+
+    assert result.events == []
+    assert result.last_serial == 7
+    assert result.completed is True
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        requests.exceptions.ReadTimeout("timeout"),
+        requests.exceptions.ConnectionError("network"),
+    ],
+)
+def test_fetch_events_network_errors_stop_collection(monkeypatch, exception):
+    session = _FakeSession(exception=exception)
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+    assert result.events == []
+
+
+@pytest.mark.parametrize("status_code", [401, 500])
+def test_fetch_events_http_errors_stop_collection(monkeypatch, status_code):
+    session = _FakeSession([_FakeResponse(status_code=status_code)])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+    assert result.events == []
+
+
+def test_fetch_events_device_error_status_stops_collection(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload={"statusCode": 4, "statusString": "bad request"})
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+
+
+def test_fetch_events_invalid_json_stops_collection(monkeypatch):
+    session = _FakeSession([_FakeResponse(payload=ValueError("bad json"))])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+
+
+def test_fetch_events_without_employee_or_serial_is_preserved(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload=_payload([{"time": "2026-04-20T09:00:00"}])),
+        _FakeResponse(payload=_payload([])),
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=5,
+    )
+
+    assert result.completed is True
+    assert result.events == [{"time": "2026-04-20T09:00:00"}]
+    assert result.last_serial == 5

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 from collector.storage import EventStorage
 from services.collector_event_repository import CollectorEventRepository
@@ -28,6 +29,36 @@ def test_storage_writes_ndjson_and_sqlite(tmp_path):
     assert storage.get_event_count() == 2
     assert storage.get_event_count("door-1") == 2
     assert storage.get_last_serial("door-1") == 2
+
+
+def test_storage_initializes_expected_sqlite_schema(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        event_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(events)")
+        }
+    finally:
+        conn.close()
+
+    assert {"events", "collector_state"}.issubset(tables)
+    assert {
+        "device",
+        "serialNo",
+        "time",
+        "employeeNoString",
+        "name",
+        "event_data",
+        "collected_at",
+    }.issubset(event_columns)
 
 
 def test_storage_replaces_duplicate_in_sqlite_but_keeps_raw_ndjson(tmp_path):
@@ -88,6 +119,46 @@ def test_sqlalchemy_repository_reads_collector_events(tmp_path):
     assert repo.count_events() == 2
     assert [event["serialNo"] for event in events] == [10, 11]
     assert repo.get_states() == []
+
+
+def test_sqlalchemy_repository_filters_by_employee_period_and_device(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(device="door-1", serial=1),
+        {
+            **_event(device="door-1", serial=2),
+            "employeeNoString": "42",
+            "time": "2026-04-22T09:00:00+03:00",
+        },
+        {
+            **_event(device="door-2", serial=3),
+            "employeeNoString": "42",
+            "time": "2026-04-23T09:00:00+03:00",
+        },
+    ])
+
+    repo = CollectorEventRepository(str(sqlite_path))
+    events = repo.load_raw_events(
+        start="2026-04-22",
+        end="2026-04-23",
+        devices=["door-1"],
+        employee_id="42",
+    )
+
+    assert len(events) == 1
+    assert events[0]["serialNo"] == 2
+    assert events[0]["employeeNoString"] == "42"
+
+
+def test_sqlalchemy_repository_handles_empty_database(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+
+    repo = CollectorEventRepository(str(sqlite_path))
+
+    assert repo.count_events() == 0
+    assert repo.load_raw_events() == []
 
 
 def test_data_loader_reads_sqlite_collector_database(tmp_path):

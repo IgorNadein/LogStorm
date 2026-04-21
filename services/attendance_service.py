@@ -6,7 +6,7 @@
 
 import pandas as pd
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from models import AttendanceRecord, WorkSchedule
 from validators import AbsenceValidator
 from analyzers import TechnicalIssueAnalyzer, StatusAnalyzer
@@ -93,7 +93,39 @@ class AttendanceService:
         print(f"Создано {len(records)} записей")
         return records
     
-    def _analyze_user_day(self, user_name: str, date, grouped) -> AttendanceRecord:
+    def analyze_user_period(
+        self,
+        user_name: str,
+        start_date,
+        end_date,
+        schedule: WorkSchedule,
+        display_name: Optional[str] = None,
+    ) -> List[AttendanceRecord]:
+        """Анализ одного пользователя за заданный период и внешний график."""
+        if start_date > end_date:
+            raise ValueError("period_start must be less than or equal to period_end")
+
+        grouped = self.df.groupby(['name', 'date'])
+        dates = pd.date_range(start=start_date, end=end_date, freq='D').date
+        return [
+            self._analyze_user_day(
+                user_name,
+                curr_date,
+                grouped,
+                schedule=schedule,
+                display_name=display_name,
+            )
+            for curr_date in dates
+        ]
+
+    def _analyze_user_day(
+        self,
+        user_name: str,
+        date,
+        grouped,
+        schedule: Optional[WorkSchedule] = None,
+        display_name: Optional[str] = None,
+    ) -> AttendanceRecord:
         """
         Анализ одного пользователя за один день
         
@@ -106,7 +138,13 @@ class AttendanceService:
             Заполненная запись AttendanceRecord
         """
         # 1. Создание базовой записи с временными данными
-        record = self._create_base_record(user_name, date, grouped)
+        record = self._create_base_record(
+            user_name,
+            date,
+            grouped,
+            schedule=schedule,
+            display_name=display_name,
+        )
         
         # 2. Определение базовых статусов (опоздание, ранний уход и т.д.)
         record.is_late, record.late_minutes = (
@@ -132,7 +170,14 @@ class AttendanceService:
         
         return record
     
-    def _create_base_record(self, user_name: str, date, grouped) -> AttendanceRecord:
+    def _create_base_record(
+        self,
+        user_name: str,
+        date,
+        grouped,
+        schedule: Optional[WorkSchedule] = None,
+        display_name: Optional[str] = None,
+    ) -> AttendanceRecord:
         """
         Создание базовой записи с временными данными
         
@@ -149,14 +194,15 @@ class AttendanceService:
         """
         # Получаем настройки пользователя
         user_prefs = self.prefs.get(user_name, {})
-        display_name = user_prefs.get('display_name', user_name)
+        display_name = display_name or user_prefs.get('display_name', user_name)
         
         # График работы
-        schedule = WorkSchedule.from_preferences(user_prefs)
+        schedule = schedule or WorkSchedule.from_preferences(user_prefs)
         
         # День недели
         weekday = pd.Timestamp(date).day_name()
-        is_workday = schedule.is_workday(weekday)
+        day_settings = schedule.get_day_settings(date)
+        is_workday = day_settings['is_workday']
         
         # Проверяем, есть ли записи для этого пользователя в этот день
         if (user_name, date) in grouped.groups:
@@ -195,7 +241,7 @@ class AttendanceService:
             appearances=appearances,
             weekday=weekday,
             is_workday=is_workday,
-            schedule_start=schedule.start_time,
-            schedule_end=schedule.end_time,
-            expected_hours=schedule.expected_hours
+            schedule_start=day_settings['start_time'],
+            schedule_end=day_settings['end_time'],
+            expected_hours=day_settings['expected_hours']
         )

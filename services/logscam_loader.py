@@ -177,6 +177,9 @@ class LogsCamLoader:
         Returns:
             DataFrame только с валидными проходами
         """
+        if df.empty:
+            return df
+
         initial_count = len(df)
         df_filtered = df[df['is_valid_pass'] == True].copy()  # noqa: E712
         filtered_count = len(df_filtered)

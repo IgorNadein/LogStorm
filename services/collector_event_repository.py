@@ -39,6 +39,7 @@ class CollectorEventRepository:
         end: Optional[str] = None,
         devices: Optional[list[str]] = None,
         limit: Optional[int] = None,
+        employee_id: Optional[str] = None,
     ) -> Iterator[CollectorEvent]:
         stmt = select(CollectorEvent).order_by(
             CollectorEvent.time,
@@ -49,6 +50,8 @@ class CollectorEventRepository:
             stmt = stmt.where(CollectorEvent.time >= start)
         if end:
             stmt = stmt.where(CollectorEvent.time <= end)
+        if employee_id:
+            stmt = stmt.where(CollectorEvent.employeeNoString == str(employee_id))
         if devices:
             stmt = stmt.where(CollectorEvent.device.in_(devices))
         if limit:
@@ -64,10 +67,13 @@ class CollectorEventRepository:
         end: Optional[str] = None,
         devices: Optional[list[str]] = None,
         limit: Optional[int] = None,
+        employee_id: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         return [
             event.to_event_dict()
-            for event in self.iter_events(start, end, devices, limit)
+            for event in self.iter_events(
+                start, end, devices, limit, employee_id
+            )
         ]
 
     def count_events(self) -> int:

@@ -85,6 +85,8 @@ class DataLoader:
         else:
             # CSV загрузка (оригинальная логика)
             df = pd.read_csv(path, on_bad_lines='skip')
+            if 'name' in df.columns:
+                df['name'] = df['name'].astype(str)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             df['date'] = df['timestamp'].dt.date
             df['time'] = df['timestamp'].dt.time

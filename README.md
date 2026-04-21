@@ -31,6 +31,8 @@ GUI-зависимости могут требовать отдельной на
 
 ```bash
 python -m pytest
+python -m pytest -q -m "not realdb"
+python -m pytest -q -m realdb --real-db /home/lizerk/Dev/LogStorm/events.db
 python -m compileall -q .
 ```
 
@@ -38,8 +40,14 @@ python -m compileall -q .
 
 - unit: конфигурация, модели, валидаторы, анализаторы, утилиты;
 - public API/core: `DataLoader`, `PersonMapper`, `AttendanceService`, `ExcelReporter`;
-- collector: конфиг, state tracking, NDJSON+SQLite storage;
-- integration: CSV/NDJSON -> анализ -> Excel-отчет во временный файл.
+- EUSRR service contract: сотрудник, период, внешний график, календарные исключения;
+- collector: конфиг, HTTP-клиент, state tracking, NDJSON+SQLite storage;
+- SQLAlchemy: чтение collector DB, фильтры по сотруднику, периоду и устройству;
+- integration: CSV/NDJSON/SQLite -> анализ -> DTO/Excel во временный файл.
+
+EUSRR считается источником графика, праздников, переносов и особых дней.
+LogStorm применяет переданный календарь к событиям коллектора; `employee_id`
+из запроса должен совпадать с `employeeNoString` в логах.
 
 ## Запуск CLI
 

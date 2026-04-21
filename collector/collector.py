@@ -39,7 +39,10 @@ import requests
 from requests.auth import HTTPDigestAuth
 from requests.exceptions import ConnectionError, ReadTimeout
 
-from storage import EventStorage
+try:
+    from .storage import EventStorage
+except ImportError:  # pragma: no cover - direct script execution
+    from storage import EventStorage
 
 try:
     from requests_toolbelt.multipart.decoder import MultipartDecoder

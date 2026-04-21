@@ -20,7 +20,7 @@ class TestConfigBackwardCompatibility:
     
     def test_late_threshold_exists(self):
         """Проверка что LATE_THRESHOLD_MINUTES доступна"""
-        assert LATE_THRESHOLD_MINUTES == 15
+        assert LATE_THRESHOLD_MINUTES == 5
     
     def test_overtime_threshold_exists(self):
         """Проверка что OVERTIME_THRESHOLD доступна"""
@@ -60,7 +60,7 @@ class TestConfigManager:
     def test_analysis_config(self):
         """Проверка доступа к analysis config"""
         assert config_manager.analysis is not None
-        assert config_manager.analysis.late_threshold_minutes == 15
+        assert config_manager.analysis.late_threshold_minutes == 5
         assert config_manager.analysis.overtime_threshold == 10
     
     def test_formatting_config(self):
@@ -71,19 +71,15 @@ class TestConfigManager:
     def test_paths_config(self):
         """Проверка доступа к paths config"""
         assert config_manager.paths is not None
-        assert 'person_mapping' in config_manager.paths.person_mapping_file
+        assert config_manager.paths.logs_file == 'data/attendance.csv'
+        assert config_manager.paths.person_mapping_file == ''
+        assert config_manager.paths.output_excel_file.startswith('reports/')
     
     def test_localization_config(self):
         """Проверка доступа к localization config"""
         assert config_manager.localization is not None
         assert len(config_manager.localization.days_ru) == 7
     
-    def test_ai_config(self):
-        """Проверка доступа к AI config"""
-        assert config_manager.ai is not None
-        assert config_manager.ai.gigachat_scope == 'GIGACHAT_API_PERS'
-
-
 class TestAnalysisConfig:
     """Тесты для AnalysisConfig"""
     

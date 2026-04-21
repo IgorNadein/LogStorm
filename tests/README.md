@@ -1,60 +1,23 @@
-# LogStorm Tests
+# Tests
 
-Набор тестов для проверки функциональности LogStorm.
-
-## 🧪 Актуальные тесты
-
-### `test_mapping_optional.py`
-Проверяет работу aliases (объединение дублирующих ID):
-- БЕЗ person_mapping.json: каждый ID остается отдельным
-- С person_mapping.json: ID объединяются через aliases
-
-**Запуск:**
-```bash
-python tests/test_mapping_optional.py
-```
-
-### `test_melanya_mapping.py`
-Тест конкретного кейса объединения ID "666" и "19" для "Меланя Гаспарян".
-
-**Запуск:**
-```bash
-python tests/test_melanya_mapping.py
-```
-
-### `test_ndjson_with_mapper.py`
-Проверяет загрузку NDJSON файлов с применением PersonMapper.
-
-**Запуск:**
-```bash
-python tests/test_ndjson_with_mapper.py
-```
-
-## ▶️ Запуск всех тестов
+Главная команда:
 
 ```bash
-# Из корневой директории проекта
-python -m pytest tests/ -v
-
-# Или запустить каждый тест отдельно
-python tests/test_mapping_optional.py
-python tests/test_melanya_mapping.py
-python tests/test_ndjson_with_mapper.py
+python -m pytest
 ```
 
-## 📋 Что тестируется
+Тестовые слои:
 
-- ✅ Загрузка NDJSON файлов из СКУД систем
-- ✅ Работа PersonMapper с aliases
-- ✅ Объединение дублирующих ID сотрудников
-- ✅ Корректность маппинга имен и расписаний
-- ✅ Фильтрация только валидных событий (major=5, minor=75)
+- config/unit: `test_config.py`, `test_utils.py`, `test_weekend_logic.py`;
+- mapping/core: `test_mapping_optional.py`, `test_melanya_mapping.py`;
+- public API/integration: `test_public_api.py`;
+- collector: `test_collector_api.py`, `test_collector_storage.py`;
+- SQLAlchemy collector DB loading: `test_collector_storage.py`, `test_public_api.py`;
+- DI: `test_di_container.py`.
 
-## 🔧 Требования
+Фактические fixtures:
 
-Тесты используют реальные данные из директории `LogsCam/`:
-- `vhod.ndjson` - входы
-- `vihod.ndjson` - выходы
-
-А также конфигурационный файл:
-- `person_mapping.json` - маппинг сотрудников
+- `data/attendance.csv`;
+- `data/vhod.ndjson`;
+- `data/vihod.ndjson`;
+- `person.json`.

@@ -30,7 +30,7 @@ def main():
     print("=" * 80)
     
     # Путь к NDJSON файлу
-    ndjson_file = 'LogsCam/vhod.ndjson'
+    ndjson_file = 'data/vhod.ndjson'
     
     if not os.path.exists(ndjson_file):
         print(f"❌ Файл {ndjson_file} не найден!")

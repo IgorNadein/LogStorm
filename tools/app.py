@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QSize, QSettings
 from PySide6.QtGui import QFont, QIcon, QPalette, QColor
 
-from services import DataLoader, AttendanceService, AIService, PersonMapper
+from services import DataLoader, AttendanceService, PersonMapper
 from reporters import SummaryReporter, ExcelReporter, ExcelFormatter
 
 try:
@@ -44,14 +44,13 @@ class AnalysisWorker(QThread):
     finished_signal = Signal(bool, str)
     
     def __init__(self, logs_paths, prefs_path, mapping_path, output_path, 
-                 file_type, enable_ai):
+                 file_type):
         super().__init__()
         self.logs_paths = logs_paths
         self.prefs_path = prefs_path
         self.mapping_path = mapping_path
         self.output_path = output_path
         self.file_type = file_type
-        self.enable_ai = enable_ai
     
     def run(self):
         """Основная логика анализа"""
@@ -139,19 +138,6 @@ class AnalysisWorker(QThread):
             else:
                 self.log_signal.emit("❌ Ошибка создания отчёта\n")
             
-            # 5. AI
-            if self.enable_ai:
-                self.log_signal.emit("\n[5/5] 🤖 AI анализ...")
-                self.status_signal.emit("⏳ AI анализ...")
-                try:
-                    ai = AIService(records)
-                    ai.generate_summary()
-                    self.log_signal.emit("✅ AI анализ завершён\n")
-                except Exception as e:
-                    self.log_signal.emit(f"⚠️ AI анализ недоступен: {e}\n")
-            else:
-                self.log_signal.emit("\n[5/5] 🤖 AI анализ отключен\n")
-            
             self.log_signal.emit("\n" + "="*60)
             self.log_signal.emit("✅ АНАЛИЗ ЗАВЕРШЁН УСПЕШНО!")
             self.log_signal.emit("="*60)
@@ -178,7 +164,6 @@ class LogStormQt(QMainWindow):
         self.mapping_path = ""
         self.output_path = DEFAULT_OUTPUT_PATH
         self.file_type = "auto"
-        self.enable_ai = True
         self.is_running = False
         self.worker = None
         
@@ -997,18 +982,6 @@ class LogStormQt(QMainWindow):
         output_group.setLayout(output_layout)
         layout.addWidget(output_group)
         
-        # Опции
-        options_group = QGroupBox("Дополнительные опции")
-        options_layout = QVBoxLayout()
-        self.ai_check = QCheckBox("Включить AI анализ (GigaChat)")
-        self.ai_check.setChecked(True)
-        options_layout.addWidget(self.ai_check)
-        hint_label = QLabel("Требуется настроенный API ключ в .env файле")
-        hint_label.setStyleSheet("color: gray; padding-left: 20px;")
-        options_layout.addWidget(hint_label)
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
-        
         # Кнопка применения
         apply_btn = QPushButton("Применить настройки")
         apply_btn.clicked.connect(self._apply_settings)
@@ -1116,14 +1089,13 @@ class LogStormQt(QMainWindow):
         about_text.setReadOnly(True)
         about_text.setHtml("""
         <h2>🔍 LogStorm v3.0</h2>
-        <p><b>Анализатор посещаемости с AI</b></p>
+        <p><b>Анализатор посещаемости</b></p>
         
         <h3>📌 Возможности:</h3>
         <ul>
             <li>Поддержка CSV и NDJSON форматов</li>
             <li>Умная классификация проблем</li>
             <li>Разделение технических сбоев и нарушений</li>
-            <li>AI анализ через GigaChat</li>
             <li>Цветовые Excel отчёты</li>
             <li>Управление сотрудниками через GUI</li>
         </ul>
@@ -1224,8 +1196,6 @@ class LogStormQt(QMainWindow):
         else:
             self.file_type = "ndjson"
         
-        self.enable_ai = self.ai_check.isChecked()
-        
         # Обновляем вкладку сотрудников если нужно
         if self.mapping_path and self.mapping_path.strip():
             self._reload_persons_tab()
@@ -1313,8 +1283,7 @@ class LogStormQt(QMainWindow):
             prefs_path,
             self.mapping_edit.text(),
             self.output_edit.text(),
-            self.file_type,
-            self.enable_ai
+            self.file_type
         )
         self.worker.log_signal.connect(self._log)
         self.worker.status_signal.connect(self.status_bar.showMessage)

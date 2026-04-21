@@ -1,60 +1,33 @@
-# 🚀 Быстрый старт LogStorm v3.0
+# Quickstart
 
-## Запуск приложения
-
-### GUI интерфейс (рекомендуется)
 ```bash
-python app.py
+pip install -r requirements.txt
+python -m pytest
+python main.py
 ```
 
-### Консольная версия
-```bash
-python cli.py
+По умолчанию используются:
+
+- CSV: `data/attendance.csv`;
+- маппинг: `person.json`;
+- отчет: `reports/attendance_report.xlsx`.
+
+Пути задаются в `config/paths.py`.
+
+Можно указать collector SQLite базу как источник логов:
+
+```python
+# config/paths.py
+logs_file = "events.db"
 ```
 
-### Проверка настроек
-```bash
-python setup.py
+или напрямую:
+
+```python
+from services import DataLoader, PersonMapper
+
+mapper = PersonMapper("person.json")
+df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
 ```
 
-## Дополнительные инструменты
-
-### Управление маппингом сотрудников
-```bash
-python tools/manage_mapping.py
-```
-
-### Запуск тестов
-```bash
-# Все тесты
-python -m pytest tests/
-
-# Конкретный тест
-python tests/test_weekend_logic.py
-```
-
-## Основные файлы
-
-- **app.py** - Главное GUI приложение
-- **cli.py** - Консольная версия для CLI
-- **config.py** - Конфигурация проекта
-- **person_mapping.json** - Маппинг сотрудников (необязательно)
-
-## Документация
-
-- **README.md** - Полная документация
-- **CHANGELOG.md** - История изменений
-- **SECURITY.md** - Безопасность
-- **REFACTORING_REPORT_v3.0.md** - Отчёт о рефакторинге
-
-## Помощь
-
-При проблемах проверьте:
-1. Установлены ли зависимости: `pip install -r requirements.txt`
-2. Настроен ли .env файл (для AI функций)
-3. Есть ли файлы логов в `logs/`
-
----
-
-**Версия:** v3.0  
-**Дата:** 22.12.2025
+GUI сейчас заморожен. Основной workflow: tests -> CLI/core -> collector.

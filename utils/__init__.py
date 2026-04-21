@@ -11,7 +11,6 @@ from .exceptions import (
     DataError,
     AnalysisError,
     ExportError,
-    AIError,
     DeviceError
 )
 
@@ -29,6 +28,5 @@ __all__ = [
     'DataError',
     'AnalysisError',
     'ExportError',
-    'AIError',
     'DeviceError',
 ]

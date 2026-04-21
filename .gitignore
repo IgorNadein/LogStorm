@@ -56,6 +56,11 @@ logs/*.ndjson
 logs/*.csv
 logs/*.log
 reports/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # Сохраняем примеры
 !data/.gitkeep

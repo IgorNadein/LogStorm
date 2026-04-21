@@ -105,6 +105,15 @@ Endpoint:
 `LOGSTORM_API_TOKEN` is optional for local development. If set, clients must
 send `Authorization: Bearer <token>`.
 
+If EUSRR does not send `schedule`, LogStorm uses the default schedule from
+`config/analysis.py`. The fallback can be controlled with:
+
+- `LOGSTORM_ALLOW_DEFAULT_SCHEDULE=false` - reject requests without `schedule`;
+- `LOGSTORM_DEFAULT_START_TIME=08:00`;
+- `LOGSTORM_DEFAULT_END_TIME=17:00`;
+- `LOGSTORM_DEFAULT_EXPECTED_HOURS=9`;
+- `LOGSTORM_DEFAULT_WORKDAYS=Monday,Tuesday,Wednesday,Thursday,Friday`.
+
 `file_type="auto"` также распознает расширения `.db`, `.sqlite`, `.sqlite3`.
 
 Поддерживаемые события СКУД:

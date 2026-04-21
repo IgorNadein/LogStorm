@@ -6,6 +6,7 @@
 LogStorm/
 ├── main.py
 ├── config/
+├── core/
 ├── services/
 ├── analyzers/
 ├── validators/
@@ -27,11 +28,12 @@ LogStorm/
 
 ## Конфигурация
 
+- `core/` - runtime core, который объединяет дефолты из `config/*`, env-настройки API и entrypoint context.
 - `config/paths.py` - `data/attendance.csv`, optional mapping path, `reports/attendance_report.xlsx`.
 - `config/analysis.py` - рабочий график и пороги анализа.
 - `config/formatting.py` - Excel-цвета и имена листов.
 - `config/localization.py` - локализация дней и месяцев.
-- `config.json` - пользовательские GUI-настройки, не источник истины для core CLI.
+- `config.json` - пользовательские GUI-настройки, не источник истины для core CLI/API.
 
 ## Данные
 

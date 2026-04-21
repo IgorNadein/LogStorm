@@ -10,6 +10,7 @@ LogStorm анализирует логи посещаемости сотрудн
 - Данные для локального smoke/integration прогона: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
 - Маппинг сотрудников для NDJSON: `person.json`
 - Конфигурация по умолчанию: `config/paths.py`, `config/analysis.py`, `config/formatting.py`, `config/localization.py`
+- Runtime core: `core/` объединяет источники настроек для API, CLI и будущих entrypoint.
 - Collector: `collector/collector.py`, `collector/storage.py`
 - SQLAlchemy ORM-модели collector storage: `models/collector_event.py`
 - Экспорт из устройства: `tools/export/export_acs_events.py`
@@ -61,7 +62,30 @@ python main.py
 - маппинг: не задан, чтобы CSV sample анализировался без фильтрации;
 - отчет: `reports/attendance_report.xlsx`.
 
-Эти значения задаются в `config/paths.py`. Для production-сценариев лучше завести отдельный локальный конфиг или обновлять эти значения через будущий config loader, а не хардкодить пути в бизнес-логике.
+Эти значения задаются в `config/paths.py` и читаются через `LogStormCore`.
+`config.json` не используется core CLI/API-контуром и относится к paused GUI.
+
+## Runtime Core
+
+Активные entrypoint должны получать настройки через `core.LogStormCore`.
+Это текущая точка объединения источников истины:
+
+- `core/settings.py` устроен как простой Django-style settings module;
+- `config/analysis.py` и `config/paths.py` задают дефолты проекта;
+- переменные `LOGSTORM_*` переопределяют runtime-настройки API;
+- `LogStormCore` передает согласованный runtime context в API/CLI;
+- legacy-константы из `config/__init__.py` сохранены только для обратной совместимости.
+
+Пример:
+
+```python
+from core import LogStormCore, build_settings
+
+settings = build_settings()
+core = LogStormCore(settings)
+db_path = core.settings.api.collector_db_path
+default_schedule = core.default_schedule_payload()
+```
 
 ## Форматы данных
 
@@ -96,6 +120,8 @@ LOGSTORM_COLLECTOR_DB_PATH=/path/to/events.db \
 LOGSTORM_API_TOKEN=change-me \
 uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
+
+`api.app` читает эти значения через `LogStormCore`.
 
 Endpoint:
 
@@ -168,6 +194,7 @@ LogStorm/
 ├── analyzers/          # анализ статусов и технических сбоев
 ├── collector/          # сборщик событий и storage
 ├── config/             # настройки проекта
+├── core/               # runtime core и единый доступ к настройкам
 ├── data/               # локальные тестовые/примерные данные
 ├── gui/                # GUI paused/experimental
 ├── models/             # AttendanceRecord, WorkSchedule

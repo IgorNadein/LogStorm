@@ -4,11 +4,12 @@
 
 from services import DataLoader, AttendanceService
 from reporters import SummaryReporter, ExcelReporter
-from config import LOGS_FILE, PERSON_MAPPING_FILE, OUTPUT_EXCEL_FILE
+from core import LogStormCore
 
 
 class LogStormApp:
-    def __init__(self):
+    def __init__(self, core: LogStormCore | None = None):
+        self.core = core or LogStormCore.from_sources()
         self.records = []
     
     def run(self):
@@ -18,17 +19,21 @@ class LogStormApp:
         
         print("\n[1/4] Загрузка...")
         import os
-        if not os.path.exists(LOGS_FILE):
+        cli_settings = self.core.settings.cli
+        if not os.path.exists(cli_settings.logs_file):
             raise FileNotFoundError(
-                f"Файл логов не найден: {LOGS_FILE}. "
-                "Укажите существующий путь в config/paths.py или config.json."
+                f"Файл логов не найден: {cli_settings.logs_file}. "
+                "Укажите существующий путь в config/paths.py."
             )
-        df = DataLoader.load_logs(LOGS_FILE)
+        df = DataLoader.load_logs(cli_settings.logs_file)
         
         # Профили теперь опциональны
-        if PERSON_MAPPING_FILE and os.path.exists(PERSON_MAPPING_FILE):
+        if (
+            cli_settings.person_mapping_file
+            and os.path.exists(cli_settings.person_mapping_file)
+        ):
             from services import PersonMapper
-            mapper = PersonMapper(PERSON_MAPPING_FILE)
+            mapper = PersonMapper(cli_settings.person_mapping_file)
             prefs = mapper.convert_to_prefs_format()
         else:
             print("ℹ️ Маппинг не задан - используются дефолты")
@@ -46,14 +51,14 @@ class LogStormApp:
         summary.print_summary()
         
         print("\n[4/4] Excel отчёт...")
-        output_dir = os.path.dirname(OUTPUT_EXCEL_FILE)
+        output_dir = os.path.dirname(cli_settings.output_excel_file)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
         excel_reporter = ExcelReporter(self.records)
-        excel_reporter.generate_report(OUTPUT_EXCEL_FILE)
+        excel_reporter.generate_report(cli_settings.output_excel_file)
         
         print("\n[OK] Анализ завершен!")
-        print(f"Отчёт сохранён: {OUTPUT_EXCEL_FILE}")
+        print(f"Отчёт сохранён: {cli_settings.output_excel_file}")
 
 
 def main():

@@ -9,6 +9,7 @@ from .eusrr_attendance_service import (
     AttendanceAnalysisRequest,
     AttendanceAnalysisResponse,
     EusrrAttendanceService,
+    attendance_record_to_dict,
 )
 from .person_mapper import PersonMapper
 from .person_repository import PersonRepository
@@ -19,6 +20,7 @@ __all__ = [
     'AttendanceService',
     'AttendanceAnalysisRequest',
     'AttendanceAnalysisResponse',
+    'attendance_record_to_dict',
     'CollectorEventRepository',
     'EusrrAttendanceService',
     'PersonMapper',

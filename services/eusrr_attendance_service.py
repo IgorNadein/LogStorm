@@ -63,10 +63,7 @@ class AttendanceAnalysisResponse:
             "period_start": self.period_start.isoformat(),
             "period_end": self.period_end.isoformat(),
             "records": [
-                {
-                    **record.to_dict(),
-                    "Дата": record.date.isoformat(),
-                }
+                attendance_record_to_dict(record)
                 for record in self.records
             ],
         }
@@ -132,6 +129,38 @@ class EusrrAttendanceService:
 
 
 def _parse_date(value: Any) -> date:
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
     return datetime.strptime(str(value), "%Y-%m-%d").date()
+
+
+def attendance_record_to_dict(record: AttendanceRecord) -> dict[str, Any]:
+    """Serialize an attendance record for machine-readable API responses."""
+    return {
+        "date": record.date.isoformat(),
+        "employee_id": record.user_name,
+        "display_name": record.display_name,
+        "arrival_time": (
+            record.arrival_time.isoformat() if record.arrival_time else None
+        ),
+        "departure_time": (
+            record.departure_time.isoformat() if record.departure_time else None
+        ),
+        "work_hours": round(record.work_hours, 2),
+        "appearances": record.appearances,
+        "weekday": record.weekday,
+        "is_workday": record.is_workday,
+        "schedule_start": record.schedule_start.strftime("%H:%M"),
+        "schedule_end": record.schedule_end.strftime("%H:%M"),
+        "expected_hours": record.expected_hours,
+        "is_late": record.is_late,
+        "late_minutes": record.late_minutes,
+        "is_early_leave": record.is_early_leave,
+        "early_leave_minutes": record.early_leave_minutes,
+        "is_underwork": record.is_underwork,
+        "is_overtime": record.is_overtime,
+        "technical_issues": list(record.technical_issues),
+        "employee_issues": list(record.employee_issues),
+    }

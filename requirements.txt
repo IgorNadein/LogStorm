@@ -4,3 +4,5 @@ PyQt-Fluent-Widgets>=1.10.0
 requests>=2.31.0
 requests-toolbelt>=1.0.0
 SQLAlchemy>=2.0.0
+fastapi>=0.118.0
+uvicorn>=0.38.0

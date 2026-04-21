@@ -87,6 +87,24 @@ mapper = PersonMapper("person.json")
 df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
 ```
 
+## HTTP API
+
+LogStorm can expose the attendance analyzer over HTTP:
+
+```bash
+LOGSTORM_COLLECTOR_DB_PATH=/path/to/events.db \
+LOGSTORM_API_TOKEN=change-me \
+uvicorn api.app:app --host 0.0.0.0 --port 8000
+```
+
+Endpoint:
+
+- `GET /health`
+- `POST /attendance/analyze`
+
+`LOGSTORM_API_TOKEN` is optional for local development. If set, clients must
+send `Authorization: Bearer <token>`.
+
 `file_type="auto"` также распознает расширения `.db`, `.sqlite`, `.sqlite3`.
 
 Поддерживаемые события СКУД:

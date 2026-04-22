@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from analyzer import DataLoader, PersonMapper, AttendanceService
 from analyzer.reporters import SummaryReporter, ExcelReporter
-from config import PERSON_MAPPING_FILE
+from core.settings import PERSON_MAPPING_FILE
 
 try:
     from dotenv import load_dotenv

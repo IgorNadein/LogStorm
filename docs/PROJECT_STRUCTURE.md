@@ -5,14 +5,9 @@
 ```text
 LogStorm/
 ├── main.py
+├── api/
 ├── analyzer/
 ├── core/
-├── config/
-├── services/
-├── analyzers/
-├── validators/
-├── models/
-├── reporters/
 ├── collector/
 ├── tools/export/
 ├── data/
@@ -22,18 +17,13 @@ LogStorm/
 
 ## Точки входа
 
-- `main.py` - CLI запуск анализа по дефолтным путям из `core/settings.py`.
-- `collector/collector.py` - фоновый или однократный сбор событий СКУД.
+- `main.py` - management entrypoint для `analyze`, `api`, `collector`, `check`, `mapping`.
+- `collector/collector.py` - реализация фонового или однократного сбора событий СКУД.
 - `tools/export/export_acs_events.py` - ручной экспорт событий из устройства.
-- `run_gui.py` - GUI entrypoint, сейчас не является частью основного тестового контура.
 
 ## Конфигурация
 
 - `core/settings.py` - единый Python settings module для API, CLI, collector и analyzer.
-- `config/*` - legacy/default compatibility layer, постепенно выводится из активного контура.
-- `config/formatting.py` - Excel-цвета и имена листов.
-- `config/localization.py` - локализация дней и месяцев.
-- `config.json` - локальные пользовательские GUI-настройки, не хранится в Git и не является источником истины для core CLI/API/collector.
 
 ## Активные приложения
 
@@ -41,22 +31,19 @@ LogStorm/
 - `analyzer/` - бизнес-логика посещаемости.
 - `collector/` - сбор событий и запись в NDJSON/SQLite.
 - `api/` - FastAPI transport.
-- `gui/` - paused/experimental.
-
-`services/`, `analyzers/`, `validators/`, `reporters/`, `models/` оставлены как compatibility wrappers для старых импортов.
 
 ## Данные
 
 - `data/attendance.csv` - CSV fixture/sample.
 - `data/vhod.ndjson` и `data/vihod.ndjson` - NDJSON fixture/sample.
-- `person.json` - текущий маппинг сотрудников.
+- `data/person.sample.json` - sample mapping сотрудников.
 - `events.db` - поддерживаемый collector SQLite формат, читается через SQLAlchemy при наличии файла.
 
 ## Тесты
 
 `pytest` проверяет:
 
-- конфигурацию и совместимые константы;
+- runtime settings и константы проекта;
 - модели и рабочий график;
 - маппинг сотрудников и aliases;
 - CSV/NDJSON загрузку;
@@ -66,16 +53,21 @@ LogStorm/
 - collector config/state/storage;
 - утилиты и исключения.
 
-## Отложенный код
+## Удаленный GUI
 
-`gui/` и `run_gui.py` сохранены, но разработка GUI приостановлена. При изменениях core не нужно считать GUI smoke-import обязательным, пока решение по GUI не принято.
+GUI больше не входит в active scope проекта. Старые `gui/`, `run_gui.py` и
+`tools/app.py` удалены; основные сценарии выполняются через `main.py`, API и
+collector.
 
 ## Устаревшие имена, которых не должно быть в новой документации
 
 - `LogsCam/`;
 - `path/person_prefs.json`;
+- `run_gui.py`;
+- `gui/`;
 - `gui_app.py`;
 - `gui_config.py`;
 - `gui_app_fluent.py`;
+- `config.json`;
 - корневой `config.py`;
 - `person_mapping.json` как основной файл маппинга.

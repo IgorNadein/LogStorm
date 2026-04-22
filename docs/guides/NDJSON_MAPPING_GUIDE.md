@@ -1,6 +1,6 @@
 # NDJSON Mapping Guide
 
-Актуальный файл маппинга: `person.json`.
+Пример файла маппинга: `data/person.sample.json`.
 
 Минимальный формат:
 
@@ -25,7 +25,7 @@
 ```python
 from analyzer import DataLoader, PersonMapper
 
-mapper = PersonMapper("person.json")
+mapper = PersonMapper("data/person.sample.json")
 df = DataLoader.load_logs(
     ["data/vhod.ndjson", "data/vihod.ndjson"],
     file_type="ndjson",

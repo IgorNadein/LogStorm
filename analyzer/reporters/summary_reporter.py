@@ -8,7 +8,7 @@ import pandas as pd
 from typing import List
 from core.models import AttendanceRecord
 from analyzer.status import StatusAnalyzer
-from config import TOP_N_USERS, OVERTIME_THRESHOLD
+from core.settings import TOP_N_USERS, OVERTIME_THRESHOLD
 
 
 class SummaryReporter:

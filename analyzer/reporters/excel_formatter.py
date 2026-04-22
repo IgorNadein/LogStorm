@@ -8,7 +8,7 @@ import openpyxl
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 from utils import ExcelStyleFactory
-from config import (
+from core.settings import (
     SHEET_MAIN_REPORT,
     SHEET_SUSPICIOUS
 )

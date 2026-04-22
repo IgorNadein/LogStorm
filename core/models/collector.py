@@ -5,7 +5,7 @@
 import json
 from typing import Any, Optional
 
-from sqlalchemy import Integer, Text
+from sqlalchemy import Integer, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -40,3 +40,28 @@ class CollectorState(Base):
     last_serial: Mapped[int] = mapped_column(Integer, nullable=False)
     last_collect: Mapped[Optional[str]] = mapped_column(Text)
     updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AttendanceManualOverride(Base):
+    """Manual attendance correction stored next to collector events."""
+
+    __tablename__ = "attendance_manual_overrides"
+    __table_args__ = (
+        UniqueConstraint(
+            "employee_id",
+            "date",
+            name="attendance_manual_override_employee_date_unique",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    employee_id: Mapped[str] = mapped_column(Text, nullable=False)
+    date: Mapped[str] = mapped_column(Text, nullable=False)
+    patch_data: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="eusrr")
+    note: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+    def patch_dict(self) -> dict[str, Any]:
+        """Return stored correction JSON as a dictionary."""
+        return json.loads(self.patch_data)

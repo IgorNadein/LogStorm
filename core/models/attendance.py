@@ -79,7 +79,7 @@ class AttendanceRecord:
     
     def to_dict(self) -> dict:
         """Конвертация в словарь для DataFrame"""
-        from config import DAYS_RU
+        from core.settings import DAYS_RU
         
         return {
             'День недели': DAYS_RU.get(self.weekday, self.weekday),

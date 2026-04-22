@@ -8,7 +8,7 @@ import pandas as pd
 
 # Импортируем пороговые значения из config
 # Эти значения можно настроить в config.py
-from config import (
+from core.settings import (
     CRITICAL_LATE_MINUTES,
     CRITICAL_UNDERWORK_HOURS,
     NIGHT_HOUR_START,

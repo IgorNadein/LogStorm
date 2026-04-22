@@ -1,6 +1,6 @@
 # Thresholds Config
 
-Пороги анализа находятся в `config/analysis.py`.
+Пороги анализа находятся в `core/settings.py`.
 
 Текущие значения:
 

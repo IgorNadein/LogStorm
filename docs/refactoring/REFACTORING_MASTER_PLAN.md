@@ -1,5 +1,8 @@
 # 🔧 Мастер-план полного рефакторинга LogStorm
 
+> Historical note: GUI refactoring is no longer active. The GUI layer was
+> removed from current LogStorm scope; use `main.py`, API and collector.
+
 **Дата создания**: 22 декабря 2025 г.  
 **Статус**: В планировании  
 **Версия проекта**: 2.9.3+
@@ -201,12 +204,10 @@ class ConfigManager:
 
 #### 2.3 Рефакторинг импортов
 ```python
-# Было:
-from config import LATE_THRESHOLD_MINUTES
+# Было: импорт порогов из legacy-пакета config.
 
 # Станет:
-from config import config_manager
-late_threshold = config_manager.analysis.late_threshold_minutes
+from core.settings import LATE_THRESHOLD_MINUTES
 ```
 
 ---

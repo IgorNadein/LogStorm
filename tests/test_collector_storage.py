@@ -178,7 +178,7 @@ def test_data_loader_reads_sqlite_collector_database(tmp_path):
         }
     ])
 
-    mapper = PersonMapper("person.json")
+    mapper = PersonMapper("data/person.sample.json")
     df = DataLoader.load_logs(str(sqlite_path), person_mapper=mapper)
 
     assert len(df) == 1

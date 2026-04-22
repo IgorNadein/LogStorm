@@ -11,24 +11,31 @@ import os
 from types import SimpleNamespace
 from typing import Mapping, Optional
 
-from core.repositories import CollectorEventRepository
+from core.repositories import (
+    AttendanceManualOverrideRepository,
+    CollectorEventRepository,
+)
 
 
 # Project defaults. Keep them boring and visible.
 LOGS_FILE = os.getenv("LOGSTORM_LOGS_FILE", "data/attendance.csv")
 PERSON_MAPPING_FILE = os.getenv("LOGSTORM_PERSON_MAPPING_FILE", "")
+SAMPLE_PERSON_MAPPING_FILE = "data/person.sample.json"
 OUTPUT_EXCEL_FILE = os.getenv(
     "LOGSTORM_OUTPUT_EXCEL_FILE",
     "reports/attendance_report.xlsx",
 )
 
 # Analyzer defaults.
+DEFAULT_START_TIME = os.getenv("LOGSTORM_DEFAULT_START_TIME", "08:00")
+DEFAULT_END_TIME = os.getenv("LOGSTORM_DEFAULT_END_TIME", "17:00")
+DEFAULT_WORK_HOURS = float(os.getenv("LOGSTORM_DEFAULT_EXPECTED_HOURS", "9"))
 DEFAULT_SCHEDULE = {
     "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-    "start_time": os.getenv("LOGSTORM_DEFAULT_START_TIME", "08:00"),
-    "end_time": os.getenv("LOGSTORM_DEFAULT_END_TIME", "17:00"),
-    "expected_hours": float(os.getenv("LOGSTORM_DEFAULT_EXPECTED_HOURS", "9")),
-    "work_hours": float(os.getenv("LOGSTORM_DEFAULT_EXPECTED_HOURS", "9")),
+    "start_time": DEFAULT_START_TIME,
+    "end_time": DEFAULT_END_TIME,
+    "expected_hours": DEFAULT_WORK_HOURS,
+    "work_hours": DEFAULT_WORK_HOURS,
 }
 
 OVERTIME_THRESHOLD = int(os.getenv("LOGSTORM_OVERTIME_THRESHOLD", "10"))
@@ -296,6 +303,13 @@ class LogStormCore:
 
     def collector_repository(self) -> CollectorEventRepository:
         return CollectorEventRepository(self.settings.api.collector_db_path)
+
+    def attendance_override_repository(
+        self,
+    ) -> AttendanceManualOverrideRepository:
+        return AttendanceManualOverrideRepository(
+            self.settings.api.collector_db_path
+        )
 
 
 def build_collector_config(

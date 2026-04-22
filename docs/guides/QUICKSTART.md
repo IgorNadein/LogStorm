@@ -3,22 +3,21 @@
 ```bash
 pip install -r requirements.txt
 python -m pytest
-python main.py
+python main.py analyze
 ```
 
 По умолчанию используются:
 
 - CSV: `data/attendance.csv`;
-- маппинг: `person.json`;
+- маппинг: `data/person.sample.json`;
 - отчет: `reports/attendance_report.xlsx`.
 
-Пути задаются в `config/paths.py`.
+Пути задаются в `core/settings.py`.
 
 Можно указать collector SQLite базу как источник логов:
 
-```python
-# config/paths.py
-logs_file = "events.db"
+```bash
+LOGSTORM_LOGS_FILE=events.db python main.py analyze
 ```
 
 или напрямую:
@@ -26,8 +25,8 @@ logs_file = "events.db"
 ```python
 from analyzer import DataLoader, PersonMapper
 
-mapper = PersonMapper("person.json")
+mapper = PersonMapper("data/person.sample.json")
 df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
 ```
 
-GUI сейчас заморожен. Основной workflow: tests -> CLI/core -> collector.
+GUI удален из active scope. Основной workflow: tests -> `main.py` -> API/collector.

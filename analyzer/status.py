@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import Tuple, List
 from core.models import AttendanceRecord
-from config import (
+from core.settings import (
     OVERTIME_THRESHOLD,
     LATE_THRESHOLD_MINUTES,
     CRITICAL_LATE_MINUTES,

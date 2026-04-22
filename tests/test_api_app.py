@@ -91,6 +91,40 @@ def test_attendance_analyze_reads_sqlite_and_returns_api_shape(tmp_path):
     assert record["work_hours"] == 9
 
 
+def test_attendance_override_is_saved_and_applied_to_analysis(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(serial=1, timestamp="2026-04-20T09:30:00"),
+        _event(serial=2, timestamp="2026-04-20T17:00:00"),
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path)))
+
+    override_response = client.patch(
+        "/attendance/overrides/100/2026-04-20",
+        json={
+            "arrival_time": "09:00:00",
+            "work_hours": 9,
+            "is_late": False,
+            "late_minutes": None,
+        },
+    )
+
+    assert override_response.status_code == 200
+    assert override_response.json()["patch"]["arrival_time"] == "09:00:00"
+
+    analyze_response = client.post("/attendance/analyze", json=_payload())
+
+    assert analyze_response.status_code == 200
+    record = analyze_response.json()["records"][0]
+    assert record["arrival_time"] == "09:00:00"
+    assert record["work_hours"] == 9
+    assert record["is_late"] is False
+    assert record["manual_edited"] is True
+    assert record["manual_edit_payload"]["is_late"] is False
+    assert not any("late" in issue.lower() for issue in record["employee_issues"])
+
+
 def test_attendance_analyze_applies_date_overrides(tmp_path):
     sqlite_path = tmp_path / "events.db"
     storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))

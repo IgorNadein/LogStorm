@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import date
 from typing import Set
 from core.models import WorkSchedule
-from config import MASS_ABSENCE_THRESHOLD, CRITICAL_ABSENCE_THRESHOLD
+from core.settings import MASS_ABSENCE_THRESHOLD, CRITICAL_ABSENCE_THRESHOLD
 
 
 class AbsenceValidator:

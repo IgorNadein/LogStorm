@@ -8,7 +8,7 @@ import pandas as pd
 from typing import List
 from core.models import AttendanceRecord
 from analyzer.reporters.excel_formatter import ExcelFormatter
-from config import (
+from core.settings import (
     OUTPUT_EXCEL_FILE,
     SHEET_MAIN_REPORT,
     SHEET_SUSPICIOUS,
@@ -127,7 +127,7 @@ class ExcelReporter:
         
         for date in dates:
             # Форматируем дату с днём недели
-            from config import DAYS_RU
+            from core.settings import DAYS_RU
             weekday_en = pd.Timestamp(date).day_name()
             weekday_ru = DAYS_RU.get(weekday_en, weekday_en)
             date_str = f"{date.day} ({weekday_ru})"

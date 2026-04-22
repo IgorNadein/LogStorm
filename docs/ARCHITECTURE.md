@@ -6,8 +6,7 @@ microservices. The current active applications are:
 - `core/` - settings, shared models, shared repositories;
 - `collector/` - access-control event collection and NDJSON/SQLite writing;
 - `analyzer/` - attendance analysis, loaders, validators, reporters, EUSRR contract;
-- `api/` - FastAPI transport for analyzer/core;
-- `gui/` - paused legacy UI.
+- `api/` - FastAPI transport for analyzer/core.
 
 ## Canonical Imports
 
@@ -23,8 +22,9 @@ from analyzer.reporters import ExcelReporter, SummaryReporter
 from analyzer.validators import AbsenceValidator, TimeValidator
 ```
 
-The old packages `services`, `analyzers`, `validators`, `reporters`, and
-`models` are compatibility wrappers only.
+The previous experimental DI layer was removed. Runtime composition now happens
+explicitly through `core.settings`, `LogStormCore`, API app factories and direct
+service construction in entrypoints.
 
 ## Settings
 
@@ -50,8 +50,12 @@ CLI       -> analyzer loaders -> analyzer service -> reports
 collector can continue writing through `sqlite3`; analyzer/API read through
 `core.repositories.CollectorEventRepository`.
 
-## Compatibility Layer
+## Removed Legacy Layers
 
-Compatibility wrappers remain for older scripts and paused GUI code. They
-should not be used by new code. Once external usage is verified, they can be
-removed in a separate cleanup.
+The old top-level packages `services`, `analyzers`, `validators`, `reporters`,
+and `models` were compatibility wrappers only and have been removed from the
+active project structure. Use the canonical imports above.
+
+The previous GUI layer (`gui/`, `run_gui.py`, and `tools/app.py`) was removed
+from active scope. Runtime operations should go through `main.py`, API,
+collector, or focused tools.

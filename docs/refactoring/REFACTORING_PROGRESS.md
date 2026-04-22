@@ -1,5 +1,8 @@
 # 📊 Отчёт о рефакторинге LogStorm
 
+> Historical note: GUI refactoring is no longer active. The GUI layer was
+> removed from current LogStorm scope; use `main.py`, API and collector.
+
 **Дата**: 22 декабря 2025 г.  
 **Ветка**: `refactoring/phase1-gui-decomposition`
 
@@ -41,24 +44,11 @@ gui/
 ---
 
 ### Фаза 2: Унификация конфигурации
-**Статус**: ✅ ВЫПОЛНЕНО
+**Статус**: ✅ ВЫПОЛНЕНО, затем упрощено в architecture cleanup
 
-Создан модульный пакет `config/` с dataclasses:
-
-```
-config/
-├── __init__.py          # ~300 строк - обратная совместимость
-├── analysis.py          # ScheduleConfig, AnalysisConfig
-├── formatting.py        # FormattingConfig
-├── paths.py             # PathsConfig
-├── localization.py      # LocalizationConfig
-└── ai.py                # AIConfig
-```
-
-**Особенности**:
-- Полная обратная совместимость: `from config import LATE_THRESHOLD_MINUTES`
-- Новый API: `config_manager.analysis.late_threshold_minutes`
-- Типизированные dataclasses с дефолтами
+Итоговое состояние: активные настройки находятся в `core/settings.py`.
+Отдельный пакет `config/` удален, чтобы не держать две параллельные системы
+настроек.
 
 ---
 
@@ -119,7 +109,7 @@ tests/
 ```
 
 **Покрытие**:
-- ✅ config (backward compat, config_manager, dataclasses)
+- ✅ core settings (единый settings module после architecture cleanup)
 - ✅ utils/logging (setup, get_logger, init)
 - ✅ utils/exceptions (все классы исключений)
 - ✅ di_container (singleton, factory, override, inject)

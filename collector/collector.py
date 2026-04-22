@@ -831,7 +831,7 @@ class Collector:
 # CLI
 # ============================================================================
 
-def main():
+def main(argv: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(
         description="LogStorm Collector - Сборщик событий СКУД"
     )
@@ -845,7 +845,7 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Подробный вывод')
     
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     
     # Создание конфига
     if args.init:

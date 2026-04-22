@@ -11,7 +11,7 @@
 """
 
 from typing import Dict, List, Optional
-from config import DEFAULT_SCHEDULE
+from core.settings import DEFAULT_SCHEDULE
 from core.models import WorkSchedule
 from .person_repository import PersonRepository
 from .person_index import PersonIndex

@@ -5,16 +5,19 @@
 ```bash
 python -m pytest
 python -m compileall -q .
-python main.py
+python main.py --help
+python main.py analyze
+python main.py api --db-path /home/lizerk/Dev/LogStorm/events.db
+python main.py collector --once
 ```
 
 ## Главные файлы
 
 | Файл | Назначение |
 | --- | --- |
-| `main.py` | CLI smoke/integration запуск core анализа |
+| `main.py` | Универсальная management-точка входа: analyze, api, collector, check, mapping |
 | `core/settings.py` | Единый Python settings module |
-| `person.json` | Маппинг сотрудников и aliases |
+| `data/person.sample.json` | Sample mapping сотрудников и aliases |
 | `collector/collector.py` | Сборщик событий СКУД |
 | `collector/storage.py` | NDJSON + SQLite хранилище |
 | `core/models/collector.py` | SQLAlchemy ORM-модели collector DB |
@@ -23,7 +26,7 @@ python main.py
 | `api/schemas.py` | Pydantic DTO HTTP API |
 | `api/auth.py` | Auth dependency для HTTP API |
 | `tools/export/export_acs_events.py` | Ручной экспорт событий из устройства |
-| `run_gui.py` | GUI entrypoint, сейчас paused/experimental |
+| `tools/check_environment.py` | Проверка локального окружения |
 
 ## Папки
 
@@ -31,11 +34,10 @@ python main.py
 | --- | --- |
 | `analyzer/` | `DataLoader`, `AttendanceService`, EUSRR contract, статусы, валидаторы, отчеты |
 | `core/` | Settings, shared models, repositories |
-| `services/`, `analyzers/`, `validators/`, `reporters/`, `models/` | Compatibility wrappers |
+| `api/` | FastAPI transport |
 | `collector/` | Фоновый сбор событий и storage |
 | `data/` | Локальные CSV/NDJSON данные для проверок |
 | `tests/` | Pytest-проверки всех активных слоев |
-| `gui/` | Отложенный GUI слой |
 
 ## Где смотреть
 
@@ -55,5 +57,5 @@ python main.py
 - Core CLI: активен.
 - Collector: активен.
 - Public API/core services: активны.
-- GUI: paused/experimental.
+- GUI: удален из active scope.
 - AI: удален из текущего проекта.

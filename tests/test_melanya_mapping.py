@@ -14,7 +14,7 @@ def test_melanya_mapping():
     print("=" * 60)
     
     # Загружаем маппер
-    mapper = PersonMapper('person.json')
+    mapper = PersonMapper('data/person.sample.json')
     
     print(f"\n[INFO] Загружено:")
     print(f"   - Маппингов: {len(mapper.mappings)}")

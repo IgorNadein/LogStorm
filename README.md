@@ -2,19 +2,19 @@
 
 LogStorm анализирует логи посещаемости сотрудников из CSV, NDJSON и collector SQLite баз событий СКУД Hikvision/HiWatch, нормализует сотрудников через маппинг, отделяет технические сбои от рабочих нарушений и формирует Excel-отчеты.
 
-Текущий приоритет проекта: стабильный core, collector и pytest-покрытие. Разработка GUI приостановлена; код в `gui/` сохранен как экспериментальный слой и не входит в обязательный тестовый контур.
+Текущий приоритет проекта: стабильный core, collector, API и pytest-покрытие.
+GUI удален из активного проекта; основной путь работы идет через `main.py`.
 
 ## Текущее состояние
 
 - Core CLI: `main.py`
 - Данные для локального smoke/integration прогона: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
-- Маппинг сотрудников для NDJSON: `person.json`
+- Пример маппинга сотрудников для NDJSON: `data/person.sample.json`
 - Runtime core: `core/settings.py` объединяет настройки API, CLI, collector и analyzer.
 - Analyzer app: `analyzer/` содержит загрузку данных, маппинг, анализ, валидаторы и отчеты.
 - Collector: `collector/collector.py`, `collector/storage.py`
 - Shared models/repositories: `core/models/`, `core/repositories/`
 - Экспорт из устройства: `tools/export/export_acs_events.py`
-- GUI: `run_gui.py`, `gui/` (paused/experimental)
 
 ## Установка
 
@@ -24,7 +24,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-GUI-зависимости могут требовать отдельной настройки окружения. Основной проверяемый контур проекта сейчас не зависит от запуска GUI.
+Проверить локальное окружение можно командой:
+
+```bash
+python tools/check_environment.py
+```
 
 ## Проверка
 
@@ -50,21 +54,24 @@ EUSRR считается источником графика, празднико
 LogStorm применяет переданный календарь к событиям коллектора; `employee_id`
 из запроса должен совпадать с `employeeNoString` в логах.
 
-## Запуск CLI
+## Management CLI
 
 ```bash
-python main.py
+python main.py --help
+python main.py analyze
+python main.py api --db-path /home/lizerk/Dev/LogStorm/events.db
+python main.py collector --config collector/collector.local.py --once
+python main.py check
 ```
 
-По умолчанию CLI читает:
+`python main.py` без подкоманды сохраняет прежнее поведение и запускает
+`analyze`. По умолчанию анализ читает:
 
 - логи: `data/attendance.csv`;
 - маппинг: не задан, чтобы CSV sample анализировался без фильтрации;
 - отчет: `reports/attendance_report.xlsx`.
 
-Эти значения задаются в `config/paths.py` и читаются через `LogStormCore`.
-`config.json` не используется core CLI/API/collector-контуром. Если paused GUI
-создает такой файл локально, он не должен попадать в Git.
+Эти значения задаются в `core/settings.py` и читаются через `LogStormCore`.
 
 ## Runtime Core
 
@@ -72,10 +79,10 @@ python main.py
 Это текущая точка объединения источников истины:
 
 - `core/settings.py` устроен как простой Django-style settings module;
-- `config/analysis.py` и `config/paths.py` задают дефолты проекта;
+- настройки анализа, путей, форматирования и локализации лежат в одном
+  `core/settings.py`;
 - переменные `LOGSTORM_*` переопределяют runtime-настройки API;
-- `LogStormCore` передает согласованный runtime context в API/CLI;
-- legacy-константы из `config/__init__.py` сохранены только для обратной совместимости.
+- `LogStormCore` передает согласованный runtime context в API/CLI.
 
 Пример:
 
@@ -108,7 +115,7 @@ SQLite collector DB:
 ```python
 from analyzer import DataLoader, PersonMapper
 
-mapper = PersonMapper("person.json")
+mapper = PersonMapper("data/person.sample.json")
 df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
 ```
 
@@ -133,7 +140,7 @@ Endpoint:
 send `Authorization: Bearer <token>`.
 
 If EUSRR does not send `schedule`, LogStorm uses the default schedule from
-`config/analysis.py`. The fallback can be controlled with:
+`core/settings.py`. The fallback can be controlled with:
 
 - `LOGSTORM_ALLOW_DEFAULT_SCHEDULE=false` - reject requests without `schedule`;
 - `LOGSTORM_DEFAULT_START_TIME=08:00`;
@@ -152,7 +159,7 @@ If EUSRR does not send `schedule`, LogStorm uses the default schedule from
 
 ## Маппинг сотрудников
 
-`person.json` использует формат:
+Sample mapping `data/person.sample.json` использует формат:
 
 ```json
 {
@@ -182,8 +189,8 @@ If EUSRR does not send `schedule`, LogStorm uses the default schedule from
 Collector собирает события СКУД и пишет их одновременно в NDJSON и SQLite:
 
 ```bash
-python collector/collector.py --init
-python collector/collector.py --config collector/collector.local.py --once
+python main.py collector --init
+python main.py collector --config collector/collector.local.py --once
 ```
 
 В тестах сетевой доступ не требуется: collector проверяется через конфигурацию, состояние, дедупликацию и локальное хранилище.
@@ -198,23 +205,19 @@ JSON-конфиги читаются только для обратной сов
 ```text
 LogStorm/
 ├── analyzer/           # анализ посещаемости, загрузчики, валидаторы, отчеты
-├── analyzers/          # compatibility wrappers для старых импортов
+├── api/                # FastAPI слой
 ├── collector/          # сборщик событий и storage
-├── config/             # настройки проекта
 ├── core/               # настройки, общие модели и repositories
 ├── data/               # локальные тестовые/примерные данные
-├── gui/                # GUI paused/experimental
-├── models/             # compatibility wrappers для core.models
-├── reporters/          # compatibility wrappers для analyzer.reporters
-├── services/           # compatibility wrappers для analyzer/core repositories
 ├── tests/              # pytest-контур
 ├── tools/export/       # экспорт событий из устройства
-├── utils/              # даты, Excel helpers, исключения, логирование
-└── validators/         # compatibility wrappers для analyzer.validators
+└── utils/              # даты, Excel helpers, исключения, логирование
 ```
 
 ## Что сейчас не является приоритетом
 
-- GUI не считается основным пользовательским путем.
+- GUI удален из active scope.
 - AI-интеграция удалена из текущего кода и документации.
-- Старые пути `LogsCam/`, `path/person_prefs.json`, `gui_app.py`, `gui_config.py`, `gui_app_fluent.py`, `config.py` не являются актуальной структурой.
+- Старые пути `LogsCam/`, `path/person_prefs.json`, `run_gui.py`, `gui/`,
+  `gui_app.py`, `gui_config.py`, `gui_app_fluent.py`, `config.json`,
+  `config.py` не являются актуальной структурой.

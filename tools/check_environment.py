@@ -5,8 +5,6 @@
 Помогает настроить секреты и проверить окружение
 """
 
-import os
-import shutil
 from pathlib import Path
 
 
@@ -61,7 +59,7 @@ def check_data_files():
     print_header("Проверка файлов данных")
     
     logs_file = Path("data/attendance.csv")
-    mapping_file = Path("person.json")
+    mapping_file = Path("data/person.sample.json")
     
     if logs_file.exists():
         print(f"✅ {logs_file}")
@@ -84,7 +82,7 @@ def print_next_steps():
     print("1. Убедитесь, что все проверки пройдены (зеленые галочки ✅)")
     print("2. Если есть проблемы, исправьте их согласно подсказкам")
     print("3. Запустите тесты: python -m pytest")
-    print("4. Запустите CLI: python main.py")
+    print("4. Запустите анализ: python main.py analyze")
     print("\n📚 Дополнительная информация:")
     print("   - README.md - основная документация")
     print("   - .env.example - пример файла с секретами")

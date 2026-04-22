@@ -65,6 +65,19 @@ class EventStorage:
                 updated_at TEXT NOT NULL
             )
         ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS attendance_manual_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                patch_data TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'eusrr',
+                note TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(employee_id, date)
+            )
+        ''')
         
         # Индексы для быстрого поиска
         conn.execute(

@@ -8,7 +8,7 @@ python -m pytest tests/test_mapping_optional.py tests/test_melanya_mapping.py
 
 Фактические входы:
 
-- `person.json`;
+- `data/person.sample.json`;
 - `data/vhod.ndjson`;
 - `data/vihod.ndjson`.
 

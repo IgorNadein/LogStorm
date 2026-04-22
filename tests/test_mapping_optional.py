@@ -7,13 +7,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from analyzer import DataLoader, PersonMapper
 
 NDJSON_FILES = ['data/vhod.ndjson', 'data/vihod.ndjson']
-MAPPING_FILE = 'person.json'
+MAPPING_FILE = 'data/person.sample.json'
 
 
 def test_without_mapping():
     """Тест БЕЗ маппинга - ID остаются разными"""
     print("=" * 70)
-    print("ТЕСТ 1: БЕЗ person.json")
+    print("ТЕСТ 1: БЕЗ data/person.sample.json")
     print("=" * 70)
     
     df = DataLoader.load_logs(
@@ -42,7 +42,7 @@ def test_without_mapping():
 def test_with_mapping():
     """Тест С маппингом - ID объединяются"""
     print("\n\n" + "=" * 70)
-    print("ТЕСТ 2: С person.json")
+    print("ТЕСТ 2: С data/person.sample.json")
     print("=" * 70)
     
     mapper = PersonMapper(MAPPING_FILE)

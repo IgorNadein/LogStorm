@@ -10,7 +10,7 @@
 ```python
 from analyzer import DataLoader, PersonMapper
 
-mapper = PersonMapper("person.json")
+mapper = PersonMapper("data/person.sample.json")
 df = DataLoader.load_logs(
     ["data/vhod.ndjson", "data/vihod.ndjson"],
     file_type="ndjson",

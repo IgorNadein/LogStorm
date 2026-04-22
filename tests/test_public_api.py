@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from config import LOGS_FILE, PERSON_MAPPING_FILE, OUTPUT_EXCEL_FILE
+from core.settings import LOGS_FILE, PERSON_MAPPING_FILE, OUTPUT_EXCEL_FILE
 from analyzer.reporters import ExcelReporter
 from analyzer import AttendanceService, DataLoader, PersonMapper
 from analyzer.validators.absence import AbsenceValidator
@@ -12,7 +12,7 @@ from analyzer.validators.absence import AbsenceValidator
 def test_public_config_points_to_existing_sample_data():
     assert Path(LOGS_FILE).exists()
     assert PERSON_MAPPING_FILE == "" or Path(PERSON_MAPPING_FILE).exists()
-    assert Path("person.json").exists()
+    assert Path("data/person.sample.json").exists()
     assert OUTPUT_EXCEL_FILE.startswith("reports/")
 
 
@@ -21,6 +21,14 @@ def test_required_runtime_does_not_include_ai_dependencies():
 
     assert "gigachat" not in requirements
     assert "openai" not in requirements
+
+
+def test_required_runtime_does_not_include_gui_dependencies():
+    requirements = Path("requirements.txt").read_text(encoding="utf-8").lower()
+
+    assert "pyqt-fluent-widgets" not in requirements
+    assert "pyside" not in requirements
+    assert "qfluentwidgets" not in requirements
 
 
 def test_core_csv_analysis_pipeline_with_sample_data():
@@ -35,7 +43,7 @@ def test_core_csv_analysis_pipeline_with_sample_data():
 
 
 def test_core_ndjson_analysis_pipeline_with_sample_data():
-    mapper = PersonMapper("person.json")
+    mapper = PersonMapper("data/person.sample.json")
     df = DataLoader.load_logs(
         ["data/vhod.ndjson", "data/vihod.ndjson"],
         file_type="ndjson",
@@ -50,7 +58,7 @@ def test_core_ndjson_analysis_pipeline_with_sample_data():
 
 @pytest.mark.realdb
 def test_real_events_db_is_supported_when_present(real_db_path):
-    mapper = PersonMapper("person.json")
+    mapper = PersonMapper("data/person.sample.json")
     df = DataLoader.load_logs(
         str(real_db_path), file_type="sqlite", person_mapper=mapper
     )

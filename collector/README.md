@@ -8,7 +8,7 @@
 # 1. Создать конфигурацию
 python collector.py --init
 
-# 2. Отредактировать collector.json (указать камеры, пути)
+# 2. Отредактировать collector.local.py (указать камеры, пути)
 
 # 3. Тестовый запуск (однократный сбор)
 python collector.py --once --verbose
@@ -32,7 +32,7 @@ After=network.target
 Type=simple
 User=YOUR_USER
 WorkingDirectory=/path/to/LogStorm/collector
-ExecStart=/usr/bin/python3 /path/to/LogStorm/collector/collector.py
+ExecStart=/usr/bin/python3 /path/to/LogStorm/collector/collector.py --config /path/to/LogStorm/collector/collector.local.py
 Restart=always
 RestartSec=10
 

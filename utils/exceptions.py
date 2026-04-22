@@ -146,35 +146,6 @@ class FileLockedError(ExportError):
         self.file_path = file_path
 
 
-# === Ошибки AI ===
-
-class AIError(LogStormError):
-    """Ошибка AI сервиса"""
-    pass
-
-
-class AIConnectionError(AIError):
-    """Ошибка подключения к AI"""
-    
-    def __init__(self, service: str = "GigaChat"):
-        super().__init__(
-            f"Не удалось подключиться к {service}",
-            "Проверьте интернет-соединение и API ключ"
-        )
-        self.service = service
-
-
-class AIAuthError(AIError):
-    """Ошибка авторизации AI"""
-    
-    def __init__(self, service: str = "GigaChat"):
-        super().__init__(
-            f"Ошибка авторизации в {service}",
-            "Проверьте GIGACHAT_CREDENTIALS в .env файле"
-        )
-        self.service = service
-
-
 # === Ошибки устройства ===
 
 class DeviceError(LogStormError):

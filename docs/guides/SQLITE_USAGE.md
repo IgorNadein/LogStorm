@@ -16,7 +16,7 @@
 ### Базовая загрузка
 
 ```python
-from services import DataLoader
+from analyzer.data_loader import DataLoader
 
 # Загрузка всех событий из БД
 df = DataLoader.load_logs(
@@ -28,40 +28,26 @@ df = DataLoader.load_logs(
 ### Загрузка с фильтрацией
 
 ```python
-from datetime import date
-from services import DataLoader
+from analyzer.data_loader import DataLoader
 
-# Загрузка событий за период
+# Загрузка событий из SQLite
 df = DataLoader.load_logs(
     'data/events.db',
-    file_type='sqlite',
-    start_date=date(2025, 12, 1),
-    end_date=date(2025, 12, 24)
-)
-
-# Загрузка с конкретных камер
-df = DataLoader.load_logs(
-    'data/events.db',
-    file_type='sqlite',
-    devices=['192.168.1.101', '192.168.1.102']
-)
-
-# Комбинированная фильтрация
-df = DataLoader.load_logs(
-    'data/events.db',
-    file_type='sqlite',
-    start_date=date(2025, 12, 1),
-    end_date=date(2025, 12, 24),
-    devices=['192.168.1.101']
+    file_type='sqlite'
 )
 ```
+
+Фильтрация по сотруднику, периоду и устройству выполняется на уровне
+`core.repositories.CollectorEventRepository`. `DataLoader` отвечает за
+нормализацию CSV, NDJSON и SQLite в общий формат анализа.
 
 ### Использование с PersonMapper
 
 ```python
-from services import DataLoader, PersonMapper
+from analyzer.data_loader import DataLoader
+from analyzer.person_mapper import PersonMapper
 
-mapper = PersonMapper('person.json')
+mapper = PersonMapper('data/person.sample.json')
 
 df = DataLoader.load_logs(
     'data/events.db',
@@ -70,55 +56,28 @@ df = DataLoader.load_logs(
 )
 ```
 
-### Прямое использование SQLiteLoader
+### Прямое использование repository
 
 ```python
-from services import SQLiteLoader
+from core.repositories import CollectorEventRepository
 from datetime import date
 
-loader = SQLiteLoader('data/events.db')
+repo = CollectorEventRepository('data/events.db')
 
 # Загрузка событий
-df = loader.load_events(
-    start_date=date(2025, 12, 1),
-    end_date=date(2025, 12, 24)
+events = repo.load_raw_events(
+    period_start=date(2025, 12, 1),
+    period_end=date(2025, 12, 24)
 )
 
-# Получение списка устройств
-devices = loader.get_device_list()
-# [{'host': '192.168.1.101', 'name': 'Камера входа'}, ...]
-
-# Получение диапазона дат
-min_date, max_date = loader.get_date_range()
-
-# Статистика
-stats = loader.get_stats()
-print(f"Всего событий: {stats['total_events']}")
-print(f"Устройств: {stats['total_devices']}")
-print(f"Сотрудников: {stats['total_employees']}")
+# События одного сотрудника
+employee_events = repo.load_raw_events(employee_id='42')
 ```
 
-## Использование в GUI
+## Использование в API и CLI
 
-В GUI приложении (`run_gui.py`) теперь можно выбрать источник данных:
-
-1. **SQLite база** - рекомендуется для больших объёмов
-2. **NDJSON файлы** - для совместимости и экспорта
-
-### Настройка в config.json
-
-```json
-{
-  "data_source": {
-    "type": "sqlite",
-    "path": "//172.11.1.254/Face_ID/data/events.db"
-  },
-  "files": [
-    "//172.11.1.254/Face_ID/logs/events.ndjson"
-  ],
-  "prefs_file": "person.json"
-}
-```
+Основной путь работы: `python main.py analyze`, `python main.py api` и
+collector. GUI удален из активного проекта.
 
 ## Миграция с NDJSON
 
@@ -133,8 +92,8 @@ from collector.storage import EventStorage
 import json
 
 storage = EventStorage(
-    ndjson_file='data/events.ndjson',
-    sqlite_file='data/events.db'
+    ndjson_path='data/events.ndjson',
+    sqlite_path='data/events.db'
 )
 
 # Загрузка событий из NDJSON
@@ -154,16 +113,14 @@ storage.write_events(events)
 | Колонка | Тип | Описание |
 |---------|-----|----------|
 | `device` | TEXT | IP адрес устройства |
-| `serial` | INTEGER | Serial номер события |
+| `serialNo` | INTEGER | Serial номер события |
 | `time` | TEXT | Время события (ISO 8601) |
-| `name` | TEXT | Имя сотрудника |
 | `employeeNoString` | TEXT | Табельный номер |
-| `major` | INTEGER | Тип события (5 = проход) |
-| `minor` | INTEGER | Подтип события |
-| `device_name` | TEXT | Название устройства |
+| `name` | TEXT | Имя сотрудника |
 | `event_data` | TEXT | Полные данные события (JSON) |
+| `collected_at` | TEXT | Время сбора события |
 
-**PRIMARY KEY**: (`device`, `serial`)
+**PRIMARY KEY**: (`device`, `serialNo`)
 
 ### Таблица `collector_state`
 
@@ -192,4 +149,4 @@ df = DataLoader.load_logs('data/events.ndjson')  # NDJSON
 df = DataLoader.load_logs('data/attendance.csv')  # CSV
 ```
 
-Все существующие скрипты продолжат работать без изменений!
+Старые импорты из `services` больше не поддерживаются.

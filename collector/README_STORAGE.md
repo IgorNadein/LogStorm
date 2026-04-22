@@ -44,7 +44,7 @@ CREATE TABLE collector_state (
 ### Обычный запуск
 
 ```bash
-python collector.py --config collector.json --verbose
+python collector.py --config collector.local.py --verbose
 ```
 
 События записываются в:
@@ -93,7 +93,7 @@ for device, serial in serials.items():
 
 ## Конфигурация
 
-В `collector.json` используйте секцию `storage` для настройки хранилища:
+В `collector.local.py` используйте секцию `storage` словаря `CONFIG` для настройки хранилища:
 
 ```json
 {

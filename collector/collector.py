@@ -18,19 +18,22 @@ LogStorm Collector - Фоновый сборщик событий СКУД
   python collector.py --once --verbose
 
   # Запуск в режиме демона (каждые N минут)
-  python collector.py --config collector.json
+  python collector.py --config collector.local.py
 
   # Создать пример конфигурации
   python collector.py --init
 """
 
 import argparse
+import copy
+import importlib.util
 import json
 import os
 import sys
 import logging
 import signal
 from datetime import datetime, timedelta
+from pprint import pformat
 from typing import Any, Dict, List, NamedTuple, Optional, Set
 from threading import Event, Lock
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -39,7 +42,16 @@ import requests
 from requests.auth import HTTPDigestAuth
 from requests.exceptions import ConnectionError, ReadTimeout
 
-from storage import EventStorage
+try:
+    from .storage import EventStorage
+except ImportError:  # pragma: no cover - direct script execution
+    from storage import EventStorage
+
+try:
+    from core import build_collector_config
+except ImportError:  # pragma: no cover - direct script execution
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from core import build_collector_config
 
 try:
     from requests_toolbelt.multipart.decoder import MultipartDecoder
@@ -51,50 +63,35 @@ except ImportError:
 # КОНФИГУРАЦИЯ
 # ============================================================================
 
-DEFAULT_CONFIG = {
-    "output_file": "//SERVER/share/logstorm/events.ndjson",
-    "log_file": "collector.log",
-    "interval_minutes": 15,
-    "max_parallel": 4,  # Параллельный сбор с N устройств
-    "initial_days": 30,  # Период первого сканирования (дней назад)
-    "images": {
-        "enabled": False,  # Сохранять изображения лиц
-        "folder": "//SERVER/share/logstorm/images",  # Папка для изображений
-        "format": "{date}/{employeeNoString}_{serialNo}.jpg",  # Формат имени
-        "unc_path": "//SERVER/share/logstorm/images"  # UNC путь для _imagePath
-    },
-    "devices": [
-        {
-            "name": "Камера входа",
-            "host": "192.168.1.101",
-            "user": "admin",
-            "password": "password",
-            "enabled": True
-        },
-        {
-            "name": "Камера выхода",
-            "host": "192.168.1.102",
-            "user": "admin",
-            "password": "password",
-            "enabled": True
-        }
-    ],
-    "request": {
-        "page_size": 30,
-        "timeout": 180,
-        "retries": 3,
-        "major": 5,
-        "minor": 0
-    }
-}
+DEFAULT_CONFIG = build_collector_config()
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Загрузка конфигурации"""
     if os.path.exists(config_path):
+        if config_path.endswith(".py"):
+            return load_python_config(config_path)
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return DEFAULT_CONFIG.copy()
+    return copy.deepcopy(DEFAULT_CONFIG)
+
+
+def load_python_config(config_path: str) -> Dict[str, Any]:
+    """Load collector configuration from a Python file with CONFIG dict."""
+    spec = importlib.util.spec_from_file_location(
+        "logstorm_collector_config",
+        config_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Не удалось загрузить Python config: {config_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = getattr(module, "CONFIG", None)
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"Python config должен содержать словарь CONFIG: {config_path}"
+        )
+    return copy.deepcopy(config)
 
 
 def get_app_dir() -> str:
@@ -111,7 +108,12 @@ def save_default_config(config_path: str) -> None:
         config_path = os.path.join(get_app_dir(), config_path)
     
     with open(config_path, 'w', encoding='utf-8') as f:
-        json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+        if config_path.endswith(".json"):
+            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+        else:
+            f.write('"""Local LogStorm collector configuration."""\n\n')
+            f.write("# Keep real credentials out of Git.\n")
+            f.write(f"CONFIG = {pformat(DEFAULT_CONFIG, width=88)}\n")
     print(f"[OK] Создан файл конфигурации: {config_path}")
 
 
@@ -136,21 +138,7 @@ def setup_logging(log_file: str, verbose: bool = False) -> logging.Logger:
     fh.setFormatter(fmt)
     logger.addHandler(fh)
     
-    # Консоль с правильной кодировкой для Windows
-    try:
-        import sys
-        import io
-        # Принудительно устанавливаем UTF-8 для stdout
-        if sys.platform == 'win32':
-            sys.stdout = io.TextIOWrapper(
-                sys.stdout.buffer,
-                encoding='utf-8',
-                errors='replace',
-                line_buffering=True
-            )
-    except Exception:
-        pass  # Игнорируем ошибки настройки кодировки
-    
+    # Консоль
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG if verbose else logging.INFO)
     ch.setFormatter(fmt)
@@ -262,7 +250,6 @@ def save_image(
 ) -> Optional[str]:
     """Сохранение изображения события"""
     folder = images_config.get('folder', 'images')
-    unc_path = images_config.get('unc_path', folder)  # UNC для _imagePath
     fmt = images_config.get(
         'format', '{date}/{employeeNoString}_{serialNo}.jpg'
     )
@@ -293,20 +280,6 @@ def save_image(
     try:
         with open(filepath, 'wb') as f:
             f.write(image_data)
-        
-        # Возвращаем UNC-путь вместо локального
-        # Заменяем локальную папку на UNC-путь
-        if folder and unc_path:
-            # Нормализуем пути для сравнения
-            folder_norm = folder.replace('\\', '/').rstrip('/')
-            unc_norm = unc_path.replace('\\', '/').rstrip('/')
-            filepath_norm = filepath.replace('\\', '/')
-            
-            # Если filepath начинается с folder, заменяем на unc_path
-            if filepath_norm.startswith(folder_norm):
-                relative_path = filepath_norm[len(folder_norm):].lstrip('/')
-                return f"{unc_norm}/{relative_path}".replace('/', '\\')
-        
         return filepath
     except Exception as e:
         logger.warning(f"    [WARN] Не удалось сохранить изображение: {e}")
@@ -858,12 +831,12 @@ class Collector:
 # CLI
 # ============================================================================
 
-def main():
+def main(argv: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(
         description="LogStorm Collector - Сборщик событий СКУД"
     )
     
-    parser.add_argument('--config', '-c', default='collector.json',
+    parser.add_argument('--config', '-c', default='collector.local.py',
                         help='Путь к конфигурации')
     parser.add_argument('--once', action='store_true',
                         help='Однократный сбор и выход')
@@ -872,7 +845,7 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Подробный вывод')
     
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     
     # Создание конфига
     if args.init:

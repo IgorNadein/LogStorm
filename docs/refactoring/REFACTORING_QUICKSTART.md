@@ -1,5 +1,8 @@
 # 🚀 Quick Start: Рефакторинг LogStorm
 
+> Historical note: GUI refactoring is no longer active. The GUI layer was
+> removed from current LogStorm scope; use `main.py`, API and collector.
+
 **Полный план**: `REFACTORING_MASTER_PLAN.md`
 
 ---
@@ -48,24 +51,17 @@ gui/
 ### ⚙️ Фаза 2: Унификация конфигурации (1 неделя) [ВЫСОКИЙ]
 **Цель**: Централизовать настройки
 
-**Создать**:
+**Актуальная цель после architecture cleanup**:
 ```python
-config/
-├── manager.py        # ConfigManager
-├── analysis.py       # Настройки анализа
-├── formatting.py     # Excel форматирование
-└── validators.py     # Пороги валидаторов
+core/settings.py      # единый settings module
 ```
 
 **Было**:
-```python
-from config import LATE_THRESHOLD_MINUTES
-```
+`LATE_THRESHOLD_MINUTES` импортировался из удаленного legacy-пакета `config`.
 
 **Станет**:
 ```python
-from config import config_manager
-late = config_manager.analysis.late_threshold
+from core.settings import LATE_THRESHOLD_MINUTES
 ```
 
 ---

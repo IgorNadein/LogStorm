@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services import DataLoader, PersonMapper, AttendanceService
-from reporters import SummaryReporter, ExcelReporter
-from config import PERSON_MAPPING_FILE
+from analyzer import DataLoader, PersonMapper, AttendanceService
+from analyzer.reporters import SummaryReporter, ExcelReporter
+from core.settings import PERSON_MAPPING_FILE
 
 try:
     from dotenv import load_dotenv
@@ -30,7 +30,7 @@ def main():
     print("=" * 80)
     
     # Путь к NDJSON файлу
-    ndjson_file = 'LogsCam/vhod.ndjson'
+    ndjson_file = 'data/vhod.ndjson'
     
     if not os.path.exists(ndjson_file):
         print(f"❌ Файл {ndjson_file} не найден!")

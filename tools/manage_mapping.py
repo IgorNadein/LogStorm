@@ -7,8 +7,9 @@
 
 import sys
 import json
-from services import PersonMapper
-from config import PERSON_MAPPING_FILE
+from analyzer import PersonMapper
+from core.models import WorkSchedule
+from core.settings import PERSON_MAPPING_FILE, SAMPLE_PERSON_MAPPING_FILE
 
 
 def print_menu():
@@ -37,8 +38,8 @@ def show_all_persons(mapper):
     for person_id in sorted(mapper.get_all_person_ids()):
         display_name = mapper.get_display_name(person_id)
         schedule = mapper.get_schedule(person_id)
-        workdays_count = len(schedule['workdays'])
-        hours = f"{schedule['start_time']}-{schedule['end_time']}"
+        workdays_count = len(schedule.workdays)
+        hours = f"{schedule.start_time}-{schedule.end_time}"
         
         print(f"{person_id:15} {display_name:30} {workdays_count} дней    {hours}")
     
@@ -100,14 +101,17 @@ def add_person(mapper):
     work_hours = int(work_hours_input) if work_hours_input else 9
     
     # Добавляем
+    schedule = WorkSchedule(
+        start_time=start_time,
+        end_time=end_time,
+        workdays=workdays,
+        expected_hours=work_hours,
+    )
     success = mapper.add_person(
         person_id=person_id,
         display_name=display_name,
         original_names=original_names,
-        workdays=workdays,
-        start_time=start_time,
-        end_time=end_time,
-        work_hours=work_hours
+        schedule=schedule,
     )
     
     if success:
@@ -310,13 +314,18 @@ def export_to_prefs(mapper):
         return False
 
 
-def main():
+def resolve_mapping_file(mapping_file=None):
+    return mapping_file or PERSON_MAPPING_FILE or SAMPLE_PERSON_MAPPING_FILE
+
+
+def main(mapping_file=None):
     """Главная функция"""
     print("\n🚀 Запуск утилиты управления маппингом...")
     
     # Загружаем маппер
+    mapping_path = resolve_mapping_file(mapping_file)
     try:
-        mapper = PersonMapper(PERSON_MAPPING_FILE)
+        mapper = PersonMapper(mapping_path)
     except Exception as e:
         print(f"❌ Ошибка загрузки: {e}")
         sys.exit(1)

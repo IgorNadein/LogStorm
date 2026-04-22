@@ -49,3 +49,15 @@ class AttendanceManualOverridePayload(BaseModel):
     is_absent: Optional[bool] = None
     source: str = "eusrr"
     note: Optional[str] = None
+
+
+class AttendanceDayEvent(BaseModel):
+    event_key: str
+    time: str
+    time_label: str
+    caption: str
+    device: str
+    device_name: str
+    serial_no: int
+    has_photo: bool
+    photo_url: Optional[str] = None

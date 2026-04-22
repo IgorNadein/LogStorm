@@ -62,6 +62,19 @@ def test_attendance_analyze_requires_token_when_configured(tmp_path):
     assert response.status_code == 401
 
 
+def test_attendance_day_events_requires_token_when_configured(tmp_path):
+    client = TestClient(create_app(
+        db_path=str(tmp_path / "events.db"),
+        api_token="secret",
+    ))
+
+    response = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20"
+    )
+
+    assert response.status_code == 401
+
+
 def test_attendance_analyze_reads_sqlite_and_returns_api_shape(tmp_path):
     sqlite_path = tmp_path / "events.db"
     storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
@@ -89,6 +102,86 @@ def test_attendance_analyze_reads_sqlite_and_returns_api_shape(tmp_path):
     assert record["arrival_time"] == "09:00:00"
     assert record["departure_time"] == "18:00:00"
     assert record["work_hours"] == 9
+
+
+def test_attendance_day_events_returns_employee_events_for_date(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    image_path = tmp_path / "images" / "event.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"fake-jpeg")
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        {
+            **_event(serial=2, timestamp="2026-04-20T12:00:00"),
+            "_imagePath": str(image_path),
+            "_device_name": "Турникет",
+        },
+        _event(serial=1, timestamp="2026-04-20T09:00:00"),
+        _event(employee_id="200", serial=3, timestamp="2026-04-20T10:00:00"),
+        _event(serial=4, timestamp="2026-04-21T09:00:00"),
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path), api_token="secret"))
+
+    response = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response.status_code == 200
+    events = response.json()
+    assert [event["serial_no"] for event in events] == [1, 2]
+    assert events[0]["time_label"] == "09:00:00"
+    assert events[0]["caption"] == "Успешный вход"
+    assert events[0]["has_photo"] is False
+    assert events[1]["device_name"] == "Турникет"
+    assert events[1]["has_photo"] is True
+    assert events[1]["photo_url"].startswith("/attendance/events/photos/")
+
+
+def test_attendance_event_photo_returns_saved_file(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    image_path = tmp_path / "images" / "event.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"fake-jpeg")
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        {
+            **_event(serial=1, timestamp="2026-04-20T09:00:00"),
+            "_imagePath": str(image_path),
+        }
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path), api_token="secret"))
+    events_response = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+        headers={"Authorization": "Bearer secret"},
+    )
+    event_key = events_response.json()[0]["event_key"]
+
+    response = client.get(
+        f"/attendance/events/photos/{event_key}/",
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-jpeg"
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_attendance_event_photo_returns_404_without_saved_file(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(serial=1, timestamp="2026-04-20T09:00:00"),
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path)))
+    events_response = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+    )
+    event_key = events_response.json()[0]["event_key"]
+
+    response = client.get(f"/attendance/events/photos/{event_key}/")
+
+    assert response.status_code == 404
 
 
 def test_attendance_override_is_saved_and_applied_to_analysis(tmp_path):

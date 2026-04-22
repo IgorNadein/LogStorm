@@ -2,10 +2,15 @@
 # -*- coding: utf-8 -*-
 """FastAPI application for LogStorm attendance analysis."""
 
+import base64
+import json
+import mimetypes
 from datetime import date
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 
 from core import LogStormCore
 from core.repositories import attendance_override_to_dict
@@ -13,9 +18,11 @@ from analyzer import AttendanceAnalysisRequest, EusrrAttendanceService
 from analyzer.logscam_loader import LogsCamLoader
 from api.auth import require_token
 from api.schemas import (
+    AttendanceDayEvent,
     AttendanceAnalyzePayload,
     AttendanceManualOverridePayload,
 )
+from utils.event_mapper import EventMapper
 
 
 ISSUE_MARKERS = {
@@ -103,6 +110,54 @@ def create_app(
         )
         return attendance_override_to_dict(override)
 
+    @app.get(
+        "/attendance/events/day/",
+        response_model=list[AttendanceDayEvent],
+        dependencies=[Depends(require_token)],
+    )
+    def attendance_day_events(employee_id: str, date: date):
+        repository = app.state.core.collector_repository()
+        events = repository.load_raw_events(
+            start=date.isoformat(),
+            end=f"{date.isoformat()}T23:59:59",
+            employee_id=employee_id,
+        )
+        return [_event_to_day_event(event) for event in events]
+
+    @app.get(
+        "/attendance/events/photos/{event_key}/",
+        dependencies=[Depends(require_token)],
+    )
+    def attendance_event_photo(event_key: str):
+        device, serial_no = _decode_event_key(event_key)
+        event = app.state.core.collector_repository().get_event(
+            device=device,
+            serial_no=serial_no,
+        )
+        if event is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event not found",
+            )
+
+        event_data = event.to_event_dict()
+        image_path = event_data.get("_imagePath")
+        if not image_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event photo not found",
+            )
+
+        path = Path(str(image_path)).expanduser()
+        if not path.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event photo file not found",
+            )
+
+        media_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+        return FileResponse(path, media_type=media_type, filename=path.name)
+
     return app
 
 
@@ -145,3 +200,59 @@ def _without_issue_markers(value: Any, markers: tuple[str, ...]) -> list[Any]:
         for item in value
         if not any(marker in str(item).lower() for marker in markers)
     ]
+
+
+def _encode_event_key(device: str, serial_no: int) -> str:
+    payload = json.dumps(
+        {"device": device, "serial_no": serial_no},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_event_key(event_key: str) -> tuple[str, int]:
+    try:
+        padding = "=" * (-len(event_key) % 4)
+        payload = base64.urlsafe_b64decode(f"{event_key}{padding}".encode("ascii"))
+        data = json.loads(payload.decode("utf-8"))
+        device = str(data["device"])
+        serial_no = int(data["serial_no"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        ) from exc
+    return device, serial_no
+
+
+def _event_to_day_event(event: dict[str, Any]) -> dict[str, Any]:
+    device = str(event.get("_device") or "")
+    serial_no = int(event.get("serialNo") or 0)
+    event_key = _encode_event_key(device, serial_no)
+    time_value = str(event.get("time") or "")
+    time_label = _format_event_time_label(time_value)
+    caption = EventMapper.get_event_description(
+        int(event.get("major") or 0),
+        int(event.get("minor") or 0),
+    )
+    has_photo = bool(event.get("_imagePath"))
+    return {
+        "event_key": event_key,
+        "time": time_value,
+        "time_label": time_label,
+        "caption": caption,
+        "device": device,
+        "device_name": str(event.get("_device_name") or device or "Устройство"),
+        "serial_no": serial_no,
+        "has_photo": has_photo,
+        "photo_url": (
+            f"/attendance/events/photos/{event_key}/" if has_photo else None
+        ),
+    }
+
+
+def _format_event_time_label(value: str) -> str:
+    if "T" not in value:
+        return value[:8] if value else "-"
+    return value.split("T", 1)[1][:8] or "-"

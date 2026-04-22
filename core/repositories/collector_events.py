@@ -76,6 +76,10 @@ class CollectorEventRepository:
             )
         ]
 
+    def get_event(self, *, device: str, serial_no: int) -> Optional[CollectorEvent]:
+        with Session(self.engine) as session:
+            return session.get(CollectorEvent, {"device": device, "serialNo": serial_no})
+
     def count_events(self) -> int:
         with Session(self.engine) as session:
             return len(session.scalars(select(CollectorEvent)).all())

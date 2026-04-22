@@ -1,0 +1,296 @@
+import logging
+from datetime import datetime
+
+import pytest
+import requests
+
+from collector.collector import (
+    DEFAULT_CONFIG,
+    EventTracker,
+    fetch_events_from_device,
+    build_request_conditions,
+    load_config,
+    save_default_config,
+)
+from collector.storage import EventStorage
+
+
+def test_load_config_returns_default_when_missing(tmp_path):
+    config = load_config(str(tmp_path / "missing.py"))
+
+    assert config["request"]["page_size"] == DEFAULT_CONFIG["request"]["page_size"]
+    assert config["devices"][0]["host"] == "192.168.1.101"
+
+
+def test_save_default_config_writes_python_config(tmp_path):
+    config_path = tmp_path / "collector.local.py"
+
+    save_default_config(str(config_path))
+
+    saved = load_config(str(config_path))
+    assert saved["interval_minutes"] == DEFAULT_CONFIG["interval_minutes"]
+    assert "devices" in saved
+
+
+def test_load_config_keeps_json_compatibility(tmp_path):
+    config_path = tmp_path / "collector.json"
+    config_path.write_text(
+        '{"request": {"page_size": 77}, "devices": []}',
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["request"]["page_size"] == 77
+
+
+def test_build_request_conditions_extends_end_time_and_uses_request_config():
+    config = {"request": {"page_size": 50, "major": 5, "minor": 75}}
+
+    cond = build_request_conditions(
+        start_time="2026-04-20T00:00:00",
+        end_time="2026-04-21T00:00:00",
+        next_serial=123,
+        config=config,
+        save_images=True,
+    )
+
+    assert cond["maxResults"] == 50
+    assert cond["major"] == 5
+    assert cond["minor"] == 75
+    assert cond["beginSerialNo"] == 123
+    assert cond["picEnable"] is True
+    assert cond["endTime"] == "2026-04-22T00:00:00"
+
+
+def test_event_tracker_uses_storage_state(tmp_path):
+    storage = EventStorage(str(tmp_path / "events.ndjson"))
+    tracker = EventTracker(storage, initial_days=10)
+
+    storage.update_collector_state(
+        "door-1",
+        last_serial=55,
+        last_collect="2026-04-21T12:00:00",
+    )
+
+    assert tracker.get_last_serial("door-1") == 55
+    assert tracker.get_last_collect_time("door-1") == "2026-04-21T12:00:00"
+    assert tracker.get_start_time("door-1") == "2026-04-21T11:00:00"
+
+
+def test_event_tracker_duplicate_cache_is_per_device(tmp_path):
+    storage = EventStorage(str(tmp_path / "events.ndjson"))
+    tracker = EventTracker(storage)
+
+    assert tracker.is_duplicate("door-1", 10) is False
+    assert tracker.is_duplicate("door-1", 10) is True
+    assert tracker.is_duplicate("door-2", 10) is False
+
+
+def test_setup_logging_does_not_crash(tmp_path):
+    from collector.collector import setup_logging
+
+    logger = setup_logging(str(tmp_path / "collector.log"), verbose=True)
+
+    assert isinstance(logger, logging.Logger)
+    assert logger.level == logging.DEBUG
+
+
+class _FakeResponse:
+    def __init__(self, status_code=200, payload=None, content_type="application/json"):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else {}
+        self.headers = {"Content-Type": content_type}
+
+    def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self, responses=None, exception=None):
+        self.responses = list(responses or [])
+        self.exception = exception
+        self.headers = {}
+        self.posts = []
+        self.closed = False
+
+    def post(self, url, **kwargs):
+        self.posts.append((url, kwargs))
+        if self.exception:
+            raise self.exception
+        return self.responses.pop(0)
+
+    def close(self):
+        self.closed = True
+
+
+def _logger():
+    logger = logging.getLogger("test_collector_api")
+    logger.handlers = []
+    logger.addHandler(logging.NullHandler())
+    return logger
+
+
+def _device():
+    return {
+        "host": "camera.local",
+        "name": "Entrance",
+        "user": "admin",
+        "password": "CHANGE_ME",
+        "save_images": False,
+    }
+
+
+def _config():
+    return {
+        "request": {"page_size": 30, "major": 5, "minor": 75, "timeout": 1},
+        "images": {"enabled": False},
+    }
+
+
+def _payload(events):
+    return {"AcsEvent": {"InfoList": events}}
+
+
+def test_fetch_events_success_and_empty_page(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload=_payload([
+            {
+                "serialNo": 10,
+                "time": "2026-04-20T09:00:00",
+                "employeeNoString": "100",
+            }
+        ])),
+        _FakeResponse(payload=_payload([])),
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=1,
+    )
+
+    assert result.completed is True
+    assert result.last_serial == 10
+    assert result.last_event_time == "2026-04-20T09:00:00"
+    assert len(result.events) == 1
+    assert session.posts[0][1]["json"]["AcsEventCond"]["beginSerialNo"] == 1
+    assert session.posts[1][1]["json"]["AcsEventCond"]["beginSerialNo"] == 11
+    assert session.closed is True
+
+
+def test_fetch_events_empty_first_page(monkeypatch):
+    session = _FakeSession([_FakeResponse(payload=_payload([]))])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=7,
+    )
+
+    assert result.events == []
+    assert result.last_serial == 7
+    assert result.completed is True
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        requests.exceptions.ReadTimeout("timeout"),
+        requests.exceptions.ConnectionError("network"),
+    ],
+)
+def test_fetch_events_network_errors_stop_collection(monkeypatch, exception):
+    session = _FakeSession(exception=exception)
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+    assert result.events == []
+
+
+@pytest.mark.parametrize("status_code", [401, 500])
+def test_fetch_events_http_errors_stop_collection(monkeypatch, status_code):
+    session = _FakeSession([_FakeResponse(status_code=status_code)])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+    assert result.events == []
+
+
+def test_fetch_events_device_error_status_stops_collection(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload={"statusCode": 4, "statusString": "bad request"})
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+
+
+def test_fetch_events_invalid_json_stops_collection(monkeypatch):
+    session = _FakeSession([_FakeResponse(payload=ValueError("bad json"))])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+    )
+
+    assert result.completed is False
+
+
+def test_fetch_events_without_employee_or_serial_is_preserved(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload=_payload([{"time": "2026-04-20T09:00:00"}])),
+        _FakeResponse(payload=_payload([])),
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+
+    result = fetch_events_from_device(
+        _device(),
+        "2026-04-20T00:00:00",
+        "2026-04-20T23:59:59",
+        _config(),
+        _logger(),
+        start_serial=5,
+    )
+
+    assert result.completed is True
+    assert result.events == [{"time": "2026-04-20T09:00:00"}]
+    assert result.last_serial == 5

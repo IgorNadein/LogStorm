@@ -5,8 +5,8 @@
 """
 
 from datetime import date, time
-from models import AttendanceRecord
-from analyzers import TechnicalIssueAnalyzer, StatusAnalyzer
+from core.models import AttendanceRecord
+from analyzer import TechnicalIssueAnalyzer, StatusAnalyzer
 
 
 def test_weekend_visit():

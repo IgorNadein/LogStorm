@@ -5,7 +5,7 @@
 """
 
 from openpyxl.styles import Font, PatternFill, Border, Side
-from config import (
+from core.settings import (
     HEADER_COLOR,
     SUMMARY_HEADER_COLOR,
     LATE_BG_COLOR,

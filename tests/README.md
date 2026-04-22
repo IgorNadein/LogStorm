@@ -1,60 +1,39 @@
-# LogStorm Tests
+# Tests
 
-Набор тестов для проверки функциональности LogStorm.
-
-## 🧪 Актуальные тесты
-
-### `test_mapping_optional.py`
-Проверяет работу aliases (объединение дублирующих ID):
-- БЕЗ person_mapping.json: каждый ID остается отдельным
-- С person_mapping.json: ID объединяются через aliases
-
-**Запуск:**
-```bash
-python tests/test_mapping_optional.py
-```
-
-### `test_melanya_mapping.py`
-Тест конкретного кейса объединения ID "666" и "19" для "Employee Alpha".
-
-**Запуск:**
-```bash
-python tests/test_melanya_mapping.py
-```
-
-### `test_ndjson_with_mapper.py`
-Проверяет загрузку NDJSON файлов с применением PersonMapper.
-
-**Запуск:**
-```bash
-python tests/test_ndjson_with_mapper.py
-```
-
-## ▶️ Запуск всех тестов
+Главная команда:
 
 ```bash
-# Из корневой директории проекта
-python -m pytest tests/ -v
-
-# Или запустить каждый тест отдельно
-python tests/test_mapping_optional.py
-python tests/test_melanya_mapping.py
-python tests/test_ndjson_with_mapper.py
+python -m pytest -q
+python -m compileall -q .
 ```
 
-## 📋 Что тестируется
+CI-контур без локальной рабочей БД:
 
-- ✅ Загрузка NDJSON файлов из СКУД систем
-- ✅ Работа PersonMapper с aliases
-- ✅ Объединение дублирующих ID сотрудников
-- ✅ Корректность маппинга имен и расписаний
-- ✅ Фильтрация только валидных событий (major=5, minor=75)
+```bash
+python -m pytest -q -m "not realdb"
+```
 
-## 🔧 Требования
+Опциональная проверка на рабочей collector DB:
 
-Тесты используют реальные данные из директории `LogsCam/`:
-- `vhod.ndjson` - входы
-- `vihod.ndjson` - выходы
+```bash
+python -m pytest -q -m realdb --real-db /home/lizerk/Dev/LogStorm/events.db
+```
 
-А также конфигурационный файл:
-- `person_mapping.json` - маппинг сотрудников
+Тестовые слои:
+
+- settings/unit: `test_config.py`, `test_utils.py`;
+- schedule/calendar: `test_schedule_calendar.py`, `test_weekend_logic.py`;
+- attendance statuses: `test_attendance_status.py`;
+- mapping/core: `test_mapping_optional.py`, `test_melanya_mapping.py`;
+- data loaders: `test_data_loader_formats.py`;
+- public API/integration: `test_public_api.py`, `test_attendance_integration.py`;
+- EUSRR contract: `test_eusrr_contract.py`;
+- collector: `test_collector_api.py`, `test_collector_storage.py`;
+- SQLAlchemy collector DB loading: `test_collector_storage.py`, `test_real_events_db.py`.
+
+Фактические fixtures:
+
+- `data/attendance.csv`;
+- `data/vhod.ndjson`;
+- `data/vihod.ndjson`;
+- `data/person.sample.json`.

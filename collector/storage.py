@@ -40,7 +40,6 @@ class EventStorage:
     
     def _init_sqlite(self) -> None:
         """Инициализация SQLite БД"""
-        # Увеличенный timeout для сетевых дисков (30 секунд)
         conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
         
         # Таблица событий
@@ -66,6 +65,19 @@ class EventStorage:
                 updated_at TEXT NOT NULL
             )
         ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS attendance_manual_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                patch_data TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'eusrr',
+                note TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(employee_id, date)
+            )
+        ''')
         
         # Индексы для быстрого поиска
         conn.execute(
@@ -76,13 +88,11 @@ class EventStorage:
             'CREATE INDEX IF NOT EXISTS idx_time '
             'ON events(time)'
         )
+
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=30000')
         
         conn.commit()
-        
-        # Включить WAL mode для лучшей работы с конкурентным доступом
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=30000')  # 30 секунд
-        
         conn.close()
     
     def write_events(self, events: List[Dict[str, Any]]) -> None:
@@ -100,32 +110,36 @@ class EventStorage:
             with open(self.ndjson_path, 'a', encoding='utf-8') as f:
                 for event in events:
                     f.write(json.dumps(event, ensure_ascii=False) + '\n')
-            
+
             # 2. Запись в SQLite (батчем)
-            conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-            try:
-                rows = []
-                for event in events:
-                    rows.append((
-                        event.get('_device', ''),
-                        event.get('serialNo', 0),
-                        event.get('time', ''),
-                        event.get('employeeNoString', ''),
-                        event.get('name', ''),
-                        json.dumps(event, ensure_ascii=False),
-                        event.get('_collected', '')
-                    ))
-                
-                conn.executemany(
-                    'INSERT OR REPLACE INTO events '
-                    '(device, serialNo, time, employeeNoString, name, '
-                    'event_data, collected_at) '
-                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    rows
-                )
-                conn.commit()
-            finally:
-                conn.close()
+            self._write_sqlite_events(events)
+
+    def _write_sqlite_events(self, events: List[Dict[str, Any]]) -> None:
+        """Запись событий только в SQLite."""
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+        try:
+            rows = []
+            for event in events:
+                rows.append((
+                    event.get('_device', ''),
+                    event.get('serialNo', 0),
+                    event.get('time', ''),
+                    event.get('employeeNoString', ''),
+                    event.get('name', ''),
+                    json.dumps(event, ensure_ascii=False),
+                    event.get('_collected', '')
+                ))
+
+            conn.executemany(
+                'INSERT OR REPLACE INTO events '
+                '(device, serialNo, time, employeeNoString, name, '
+                'event_data, collected_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                rows
+            )
+            conn.commit()
+        finally:
+            conn.close()
     
     def update_collector_state(
         self, device: str, last_serial: int, last_collect: Optional[str] = None
@@ -273,7 +287,7 @@ class EventStorage:
                     count += 1
                     
                     if len(batch) >= batch_size:
-                        self.write_events(batch)
+                        self._write_sqlite_events(batch)
                         batch = []
                         
                         if progress_callback:
@@ -284,6 +298,6 @@ class EventStorage:
         
         # Запись остатка
         if batch:
-            self.write_events(batch)
+            self._write_sqlite_events(batch)
         
         return count

@@ -1,5 +1,8 @@
 # ✅ Фаза 1 ЗАВЕРШЕНА: Декомпозиция GUI
 
+> Historical note: GUI refactoring is no longer active. The GUI layer was
+> removed from current LogStorm scope; use `main.py`, API and collector.
+
 **Дата завершения**: 22 декабря 2025  
 **Ветка**: `refactoring/phase1-gui-decomposition`  
 **Коммиты**: fd2df6d, e259299, 888590c
@@ -142,12 +145,8 @@ gui/
 ### Фаза 2: Унификация конфигурации (1 неделя) [ВЫСОКИЙ]
 
 **Цели**:
-1. Создать `config/` пакет с подмодулями:
-   - `config/base.py` - ConfigManager
-   - `config/analysis.py` - настройки анализа
-   - `config/formatting.py` - Excel форматирование
-   - `config/gui.py` - настройки GUI
-   - `config/validators.py` - пороги валидаторов
+1. Исторический план предполагал отдельный пакет настроек. После
+   architecture cleanup актуальная цель - единый `core/settings.py`.
 
 2. Рефакторинг:
    - Заменить `config.py` (плоский файл) на `config/` (пакет)

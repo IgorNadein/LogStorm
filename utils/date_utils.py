@@ -7,7 +7,7 @@
 import pandas as pd
 from datetime import date
 from typing import List
-from config import DAYS_RU
+from core.settings import DAYS_RU
 
 
 class DateUtils:

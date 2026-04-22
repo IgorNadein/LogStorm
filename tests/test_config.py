@@ -1,10 +1,9 @@
-"""
-Тесты для модуля конфигурации
-"""
+"""Tests for central LogStorm settings."""
 
 import pytest
-from config import (
-    config_manager,
+
+from core.settings import (
+    DEFAULT_WORK_HOURS,
     LATE_THRESHOLD_MINUTES,
     OVERTIME_THRESHOLD,
     NIGHT_HOUR_START,
@@ -15,12 +14,12 @@ from config import (
 )
 
 
-class TestConfigBackwardCompatibility:
-    """Тесты обратной совместимости"""
-    
+class TestSettingsConstants:
+    """Core settings should expose the project defaults."""
+
     def test_late_threshold_exists(self):
         """Проверка что LATE_THRESHOLD_MINUTES доступна"""
-        assert LATE_THRESHOLD_MINUTES == 15
+        assert LATE_THRESHOLD_MINUTES == 5
     
     def test_overtime_threshold_exists(self):
         """Проверка что OVERTIME_THRESHOLD доступна"""
@@ -36,6 +35,8 @@ class TestConfigBackwardCompatibility:
         assert isinstance(DEFAULT_SCHEDULE, dict)
         assert 'workdays' in DEFAULT_SCHEDULE
         assert 'start_time' in DEFAULT_SCHEDULE
+        assert DEFAULT_SCHEDULE['expected_hours'] == DEFAULT_WORK_HOURS
+        assert DEFAULT_SCHEDULE['work_hours'] == DEFAULT_WORK_HOURS
     
     def test_days_ru_has_all_days(self):
         """Проверка что все дни переведены"""
@@ -49,81 +50,43 @@ class TestConfigBackwardCompatibility:
         assert 1 in MONTHS_RU
         assert MONTHS_RU[1] == 'Январь'
 
-
-class TestConfigManager:
-    """Тесты для ConfigManager"""
-    
-    def test_config_manager_exists(self):
-        """Проверка что config_manager доступен"""
-        assert config_manager is not None
-    
-    def test_analysis_config(self):
-        """Проверка доступа к analysis config"""
-        assert config_manager.analysis is not None
-        assert config_manager.analysis.late_threshold_minutes == 15
-        assert config_manager.analysis.overtime_threshold == 10
-    
-    def test_formatting_config(self):
-        """Проверка доступа к formatting config"""
-        assert config_manager.formatting is not None
-        assert config_manager.formatting.header_color == "4472C4"
-    
-    def test_paths_config(self):
-        """Проверка доступа к paths config"""
-        assert config_manager.paths is not None
-        assert 'person_mapping' in config_manager.paths.person_mapping_file
-    
-    def test_localization_config(self):
-        """Проверка доступа к localization config"""
-        assert config_manager.localization is not None
-        assert len(config_manager.localization.days_ru) == 7
-    
-    def test_ai_config(self):
-        """Проверка доступа к AI config"""
-        assert config_manager.ai is not None
-        assert config_manager.ai.gigachat_scope == 'GIGACHAT_API_PERS'
-
-
-class TestAnalysisConfig:
-    """Тесты для AnalysisConfig"""
+class TestAnalysisSettings:
+    """Tests for analysis settings."""
     
     def test_default_schedule(self):
         """Проверка расписания по умолчанию"""
-        schedule = config_manager.analysis.default_schedule
-        assert schedule.work_hours == 9
-        assert len(schedule.workdays) == 5
-        assert 'Monday' in schedule.workdays
-        assert 'Saturday' not in schedule.workdays
+        assert DEFAULT_SCHEDULE["work_hours"] == 9
+        assert len(DEFAULT_SCHEDULE["workdays"]) == 5
+        assert 'Monday' in DEFAULT_SCHEDULE["workdays"]
+        assert 'Saturday' not in DEFAULT_SCHEDULE["workdays"]
     
     def test_thresholds_are_positive(self):
         """Проверка что все пороги положительные"""
-        analysis = config_manager.analysis
-        assert analysis.late_threshold_minutes > 0
-        assert analysis.overtime_threshold > 0
-        assert analysis.critical_late_minutes > 0
-        assert analysis.critical_underwork_hours > 0
+        assert LATE_THRESHOLD_MINUTES > 0
+        assert OVERTIME_THRESHOLD > 0
     
     def test_night_hours_valid(self):
         """Проверка что ночные часы валидны"""
-        analysis = config_manager.analysis
-        assert 0 <= analysis.night_hour_start <= 23
-        assert 0 <= analysis.night_hour_end <= 23
+        assert 0 <= NIGHT_HOUR_START <= 23
+        assert 0 <= NIGHT_HOUR_END <= 23
 
 
-class TestFormattingConfig:
-    """Тесты для FormattingConfig"""
+class TestFormattingSettings:
+    """Tests for formatting settings."""
     
     def test_colors_are_hex(self):
         """Проверка что цвета в hex формате"""
-        formatting = config_manager.formatting
-        assert len(formatting.header_color) == 6
-        assert all(c in '0123456789ABCDEF' for c in formatting.header_color.upper())
+        from core.settings import HEADER_COLOR
+
+        assert len(HEADER_COLOR) == 6
+        assert all(c in '0123456789ABCDEF' for c in HEADER_COLOR.upper())
     
     def test_sheet_names_not_empty(self):
         """Проверка что названия листов заполнены"""
-        formatting = config_manager.formatting
-        assert len(formatting.sheet_main_report) > 0
-        assert len(formatting.sheet_suspicious) > 0
+        from core.settings import SHEET_MAIN_REPORT, SHEET_SUSPICIOUS
+
+        assert len(SHEET_MAIN_REPORT) > 0
+        assert len(SHEET_SUSPICIOUS) > 0
 
 
 if __name__ == '__main__':

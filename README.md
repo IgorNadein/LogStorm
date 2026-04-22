@@ -1,394 +1,223 @@
-# LogStorm - Анализатор логов посещаемости
+# LogStorm
 
-🔍 Приложение для анализа логов посещаемости сотрудников с **умным разделением технических сбоев и реальных проблем**, генерацией Excel отчетов и AI-анализом.
+LogStorm анализирует логи посещаемости сотрудников из CSV, NDJSON и collector SQLite баз событий СКУД Hikvision/HiWatch, нормализует сотрудников через маппинг, отделяет технические сбои от рабочих нарушений и формирует Excel-отчеты.
 
-## ✨ Ключевые особенности v2.8
+Текущий приоритет проекта: стабильный core, collector, API и pytest-покрытие.
+GUI удален из активного проекта; основной путь работы идет через `main.py`.
 
-- 🖥️ **Графический интерфейс** - нативный GUI на tkinter
-- 📁 **Множественные файлы** - анализ нескольких файлов одновременно
-- 📊 **Мультиформат** - поддержка CSV и NDJSON (Hikvision СКУД)
-- 🆕 **Маппинг сотрудников СКУД** - изменение имён, расписаний, объединение ID
-- 🔓 **Опциональные профили** - работа без person_prefs.json
-- 🎯 **Умная классификация** - различает технические сбои системы и реальные проблемы сотрудников
-- 📈 **Справедливая статистика** - исключает баги системы из оценки работников
-- 🤖 **AI анализ** - интеграция с GigaChat для автоматических выводов
-- 🎨 **Цветовое кодирование** - наглядная визуализация проблем в Excel
+## Текущее состояние
 
-## 📋 Возможности
+- Core CLI: `main.py`
+- Данные для локального smoke/integration прогона: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
+- Пример маппинга сотрудников для NDJSON: `data/person.sample.json`
+- Runtime core: `core/settings.py` объединяет настройки API, CLI, collector и analyzer.
+- Analyzer app: `analyzer/` содержит загрузку данных, маппинг, анализ, валидаторы и отчеты.
+- Collector: `collector/collector.py`, `collector/storage.py`
+- Shared models/repositories: `core/models/`, `core/repositories/`
+- Экспорт из устройства: `tools/export/export_acs_events.py`
 
-### Основной функционал
-- ✅ Чтение CSV логов посещаемости с камер
-- ✅ Чтение NDJSON событий из Hikvision/HiWatch СКУД
-- ✅ **Загрузка нескольких файлов** - объединение данных из разных источников
-- ✅ Автоопределение формата файла
-- ✅ **Работа без профилей** - анализ всех пользователей с дефолтными настройками
-- ✅ 🆕 **PersonMapper** - маппинг сотрудников из СКУД:
-  - Изменение отображаемых имён
-  - Индивидуальные расписания работы
-  - Объединение нескольких ID в одного человека (aliases)
-- ✅ Сопоставление с профилями сотрудников и их графиками работы
-- ✅ Анализ времени прихода и ухода
-- ✅ Определение опозданий (>15 мин) и недоработок (1-3ч)
-- ✅ Выявление переработок (более 10 часов)
-
-### Умная диагностика
-- 🔧 **Технические сбои** (не вина сотрудника):
-  - Одно появление за день (камера не зафиксировала все проходы)
-  - Ночная активность 22:00-06:00 (аномалия системы)
-  - Критическая недоработка с аномалиями (<6ч или -3ч)
-  
-- ⚠️ **Проблемы сотрудников** (реальные нарушения):
-  - Опоздание более 15 минут
-  - Недоработка 1-3 часа
-  - Систематические нарушения
-
-### Отчетность
-- 📊 Генерация Excel с двумя листами:
-  - "Отчет по дням" - полная статистика
-  - "Подозрительные случаи" - технические аномалии
-- 🎨 Цветовое выделение: красный=сбой, желтый=проблема, зеленый=переработка
-- 📝 Текстовая сводка с разделением валидных данных и сбоев
-- 🤖 AI-анализ через GigaChat (автоматические выводы и рекомендации)
-
-## 📁 Структура проекта
-
-```
-LogStorm/
-├── logs/
-│   └── attendance.csv          # CSV с логами (timestamp, camera, name)
-├── LogsCam/
-│   ├── events_with_pic.ndjson  # NDJSON события СКУД
-│   └── export_acs_events.py    # Скрипт экспорта из Hikvision
-├── path/
-│   └── person_prefs.json       # JSON с профилями
-├── reports/                     # Сгенерированные отчёты
-├── services/                    # Бизнес-логика
-│   ├── data_loader.py          # Загрузка CSV/NDJSON
-│   ├── logscam_loader.py       # NDJSON парсер
-│   └── ...
-├── utils/
-│   ├── event_mapper.py         # Маппинг событий СКУД
-│   └── ...
-├── gui_app.py                   # GUI приложение
-├── gui_config.py                # Настройки GUI
-├── run_gui.py                   # Запуск GUI
-├── main.py                      # CLI версия
-├── requirements.txt             # Зависимости
-└── README.md                    # Документация
-```
-
-## 🚀 Установка
-
-1. Клонируйте репозиторий или скачайте файлы
-2. Установите зависимости:
+## Установка
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. Настройте секреты (для AI анализа):
+Проверить локальное окружение можно командой:
 
 ```bash
-# Скопируйте пример конфигурации
-cp .env.example .env
-
-# Откройте .env и добавьте ваш GigaChat API ключ
-# Замените 'your_client_secret_here' на реальный ключ
+python tools/check_environment.py
 ```
 
-4. Проверьте настройки (опционально):
+## Проверка
+
+Главный источник правды по текущему поведению проекта - `pytest`.
 
 ```bash
-python setup.py
+python -m pytest
+python -m pytest -q -m "not realdb"
+python -m pytest -q -m realdb --real-db /home/lizerk/Dev/LogStorm/events.db
+python -m compileall -q .
 ```
 
-## 📊 Формат входных данных
+Покрываемые слои:
 
-### 📄 CSV формат (attendance.csv)
+- unit: конфигурация, модели, валидаторы, анализаторы, утилиты;
+- public API/core: `DataLoader`, `PersonMapper`, `AttendanceService`, `ExcelReporter`;
+- EUSRR service contract: сотрудник, период, внешний график, календарные исключения;
+- collector: конфиг, HTTP-клиент, state tracking, NDJSON+SQLite storage;
+- SQLAlchemy: чтение collector DB, фильтры по сотруднику, периоду и устройству;
+- integration: CSV/NDJSON/SQLite -> анализ -> DTO/Excel во временный файл.
+
+EUSRR считается источником графика, праздников, переносов и особых дней.
+LogStorm применяет переданный календарь к событиям коллектора; `employee_id`
+из запроса должен совпадать с `employeeNoString` в логах.
+
+## Management CLI
+
+```bash
+python main.py --help
+python main.py analyze
+python main.py api --db-path /home/lizerk/Dev/LogStorm/events.db
+python main.py collector --config collector/collector.local.py --once
+python main.py check
+```
+
+`python main.py` без подкоманды сохраняет прежнее поведение и запускает
+`analyze`. По умолчанию анализ читает:
+
+- логи: `data/attendance.csv`;
+- маппинг: не задан, чтобы CSV sample анализировался без фильтрации;
+- отчет: `reports/attendance_report.xlsx`.
+
+Эти значения задаются в `core/settings.py` и читаются через `LogStormCore`.
+
+## Runtime Core
+
+Активные entrypoint должны получать настройки через `core.LogStormCore`.
+Это текущая точка объединения источников истины:
+
+- `core/settings.py` устроен как простой Django-style settings module;
+- настройки анализа, путей, форматирования и локализации лежат в одном
+  `core/settings.py`;
+- переменные `LOGSTORM_*` переопределяют runtime-настройки API;
+- `LogStormCore` передает согласованный runtime context в API/CLI.
+
+Пример:
+
+```python
+from core import LogStormCore, build_settings
+
+settings = build_settings()
+core = LogStormCore(settings)
+db_path = core.settings.api.collector_db_path
+default_schedule = core.default_schedule_payload()
+```
+
+## Форматы данных
+
+CSV:
+
 ```csv
 timestamp,camera,name,distance,identity
 2025-10-01T15:59:57,main_entrance,igor_nadein,0.34107,"data\people\igor_nadein\photo.jpg"
 ```
 
-### 📄 NDJSON формат (events_with_pic.ndjson)
-Hikvision/HiWatch СКУД формат. Каждая строка - JSON событие:
+NDJSON:
+
 ```json
-{"major": 5, "minor": 75, "time": "2025-12-01T06:05:04+03:00", "cardNo": "18446744073609551922", "name": "Employee Delta", "employeeNoString": "55", "serialNo": 97659}
-{"major": 5, "minor": 104, "time": "2025-12-01T06:05:13+03:00", "cardNo": "18446744073609551922", "name": "Employee Delta", "employeeNoString": "55", "serialNo": 97662}
+{"major": 5, "minor": 75, "time": "2025-12-01T06:05:04+03:00", "name": "Employee Delta", "employeeNoString": "55", "serialNo": 97659}
 ```
 
-**Маппинг событий СКУД:**
-- `minor=75` - Успешный вход
-- `minor=104` - Успешный выход  
-- `minor=21/22` - Дверь открыта/закрыта
-- `minor=76` - Неопознанное лицо
+SQLite collector DB:
 
-Для экспорта из устройства используйте `LogsCam/export_acs_events.py`.
+```python
+from analyzer import DataLoader, PersonMapper
 
-### 👤 Файл профилей (person_prefs.json) - **НЕОБЯЗАТЕЛЬНЫЙ** 🆕
-```json
-{
-  "igor_nadein": {
-    "display_name": "Игорь Надеин",
-    "start_time": "08:00",
-    "end_time": "17:00",
-    "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-  }
-}
+mapper = PersonMapper("data/person.sample.json")
+df = DataLoader.load_logs("events.db", file_type="sqlite", person_mapper=mapper)
 ```
 
-**Примечания:**
-- 🆕 **Файл теперь необязательный!** Без него система анализирует ВСЕХ сотрудников с дефолтными настройками
-- `start_time` и `end_time` - необязательные поля. По умолчанию: 08:00-17:00
-- `workdays` - необязательное поле. По умолчанию: Пн-Пт
-- Если файл указан - анализируются только сотрудники из файла
-- Если файл НЕ указан - анализируются ВСЕ из логов
+## HTTP API
 
-📖 Подробнее: см. `OPTIONAL_PREFS_GUIDE.md`
+LogStorm can expose the attendance analyzer over HTTP:
 
-### 🆕 Маппинг сотрудников СКУД (person_mapping.json)
-Для NDJSON логов доступен расширенный маппинг:
+```bash
+LOGSTORM_COLLECTOR_DB_PATH=/path/to/events.db \
+LOGSTORM_API_TOKEN=change-me \
+uvicorn api.app:app --host 0.0.0.0 --port 8000
+```
+
+`api.app` читает эти значения через `LogStormCore`.
+
+Endpoint:
+
+- `GET /health`
+- `POST /attendance/analyze`
+
+`LOGSTORM_API_TOKEN` is optional for local development. If set, clients must
+send `Authorization: Bearer <token>`.
+
+If EUSRR does not send `schedule`, LogStorm uses the default schedule from
+`core/settings.py`. The fallback can be controlled with:
+
+- `LOGSTORM_ALLOW_DEFAULT_SCHEDULE=false` - reject requests without `schedule`;
+- `LOGSTORM_DEFAULT_START_TIME=08:00`;
+- `LOGSTORM_DEFAULT_END_TIME=17:00`;
+- `LOGSTORM_DEFAULT_EXPECTED_HOURS=9`;
+- `LOGSTORM_DEFAULT_WORKDAYS=Monday,Tuesday,Wednesday,Thursday,Friday`.
+
+`file_type="auto"` также распознает расширения `.db`, `.sqlite`, `.sqlite3`.
+
+Поддерживаемые события СКУД:
+
+- `minor=75` - успешный вход;
+- `minor=104` - успешный выход;
+- `minor=21/22` - дверь открыта/закрыта;
+- `minor=76` - неопознанное лицо.
+
+## Маппинг сотрудников
+
+Sample mapping `data/person.sample.json` использует формат:
 
 ```json
 {
   "person_mappings": {
-    "30": {
-      "display_name": "Ирина Погонина",
-      "original_names": ["Ирина Погонина"],
+    "19": {
+      "display_name": "Employee Alpha",
       "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      "start_time": "09:00",
-      "end_time": "18:00",
+      "start_time": "08:00",
       "work_hours": 9
     }
   },
   "aliases": {
-    "54": ["sergei_bondar_2", "bondar_old"]
+    "19": ["666"]
   }
 }
 ```
 
-**Возможности:**
-- ✅ Изменение отображаемых имён сотрудников
-- ✅ Индивидуальные расписания для каждого
-- ✅ Объединение нескольких ID в одного человека (aliases)
-- ✅ Поддержка нескольких вариантов имён из СКУД
+`PersonMapper` умеет:
 
-📖 Подробнее: см. `QUICKSTART_NDJSON.md` и `NDJSON_MAPPING_GUIDE.md`
+- менять отображаемые имена;
+- применять индивидуальные графики;
+- объединять несколько ID одного сотрудника через `aliases`;
+- работать как источник профилей для `AttendanceService`.
 
-**Управление маппингом:**
-```bash
-python manage_mapping.py  # Интерактивная утилита
-```
+## Collector
 
-## 💻 Использование
-
-### 🖥️ GUI режим (рекомендуется)
-
-Запустите графический интерфейс:
+Collector собирает события СКУД и пишет их одновременно в NDJSON и SQLite:
 
 ```bash
-python run_gui.py
-# или
-python gui_app.py
+python main.py collector --init
+python main.py collector --config collector/collector.local.py --once
 ```
 
-**Возможности GUI:**
-- 📁 Выбор файлов через удобный интерфейс
-- 🔄 Автоопределение формата (CSV/NDJSON)
-- ⚙️ Настройка параметров анализа
-- 📊 Просмотр лога выполнения в реальном времени
-- 📂 Быстрое открытие готового отчёта
+В тестах сетевой доступ не требуется: collector проверяется через конфигурацию, состояние, дедупликацию и локальное хранилище.
 
-### ⌨️ CLI режим (командная строка)
+Collector config теперь Python-файл с верхнеуровневым словарем `CONFIG`.
+JSON-конфиги читаются только для обратной совместимости.
 
-Запустите скрипт напрямую:
+## Структура
 
-```bash
-python main.py
+Подробное описание архитектурных границ: `docs/ARCHITECTURE.md`.
+
+```text
+LogStorm/
+├── analyzer/           # анализ посещаемости, загрузчики, валидаторы, отчеты
+├── api/                # FastAPI слой
+├── collector/          # сборщик событий и storage
+├── core/               # настройки, общие модели и repositories
+├── data/               # локальные тестовые/примерные данные
+├── tests/              # pytest-контур
+├── tools/export/       # экспорт событий из устройства
+└── utils/              # даты, Excel helpers, исключения, логирование
 ```
 
-Скрипт выполнит:
-1. Загрузку данных из `logs/attendance.csv` или `LogsCam/events_with_pic.ndjson`
-2. Фильтрацию только пользователей с профилями
-3. Анализ посещаемости по дням
-4. Генерацию Excel отчета `attendance_report.xlsx`
-5. Вывод текстовой сводки в консоль
-6. AI анализ (если настроен GigaChat)
+## Что сейчас не является приоритетом
 
-## 📄 Результаты
-
-### Excel отчет (attendance_report.xlsx)
-
-**Лист "Отчет по дням":**
-- Дата
-- Имя (отображаемое)
-- ID (системное имя)
-- Приход
-- Уход
-- Рабочих часов
-- Опоздание (Да/Нет)
-- Опоздание (мин)
-- Ранний уход (Да/Нет)
-- Недоработка (мин)
-- Переработка (Да/Нет, >10 часов)
-- Появлений (количество)
-- Подозрительно
-- График начало/конец
-
-**Цветовая маркировка:**
-- 🟡 Желтый - опоздания
-- 🔴 Красный - переработки или подозрительные случаи
-- 🟢 Белый - нормальный рабочий день
-
-**Лист "Подозрительные случаи":**
-- Содержит только записи с подозрительной активностью
-
-### Текстовая сводка
-
-Выводится в консоль и включает:
-- Общую статистику
-- Анализ опозданий с топ-5 опаздывающих
-- Анализ переработок
-- Средние рабочие часы
-- Подозрительные случаи
-- Статистику по дням недели
-
-## 🔧 Настройка
-
-### Изменение пути к файлам
-
-В `main.py` измените параметры при создании объекта:
-
-```python
-analyzer = AttendanceAnalyzer(
-    logs_path='путь/к/attendance.csv',
-    prefs_path='путь/к/person_prefs.json'
-)
-```
-
-### Изменение критериев
-
-В классе `AttendanceAnalyzer` можно настроить:
-- **Переработка**: измените условие `work_hours > 10` (строка 89)
-- **Ночная активность**: измените диапазон `hour < 6` или `hour >= 22` (строки 96-97)
-- **Стандартный график**: измените в методе `get_work_schedule()` (строки 47-48)
-
-## 🤖 AI анализ (GigaChat)
-
-Приложение поддерживает интеграцию с GigaChat API от Сбера для автоматической генерации текстового анализа посещаемости.
-
-### Настройка GigaChat:
-
-1. **Получите API ключ:**
-   - Перейдите на https://developers.sber.ru/gigachat
-   - Зарегистрируйтесь и создайте проект
-   - Скопируйте API ключ (Client Secret)
-
-2. **Настройте через .env файл (РЕКОМЕНДУЕТСЯ):**
-
-```bash
-# Скопируйте пример
-cp .env.example .env
-
-# Откройте .env в любом текстовом редакторе
-nano .env
-# или
-notepad .env
-
-# Замените 'your_client_secret_here' на ваш настоящий ключ
-GIGACHAT_API_KEY=ваш_реальный_client_secret
-```
-
-3. **Альтернатива - переменная окружения:**
-
-**Windows (PowerShell):**
-```powershell
-$env:GIGACHAT_API_KEY="ваш_api_ключ"
-```
-
-**Windows (CMD):**
-```cmd
-set GIGACHAT_API_KEY=ваш_api_ключ
-```
-
-**Linux/Mac:**
-```bash
-export GIGACHAT_API_KEY="ваш_api_ключ"
-```
-
-Или добавьте в `.bashrc` / `.zshrc` для постоянного использования.
-
-**⚠️ ВАЖНО:** Файл `.env` содержит секреты и уже добавлен в `.gitignore`. Никогда не публикуйте его!
-
-4. **Запустите анализ:**
-```bash
-python main.py
-```
-
-AI сгенерирует:
-- Краткую профессиональную сводку (4-5 предложений)
-- Оценку общей дисциплины
-- Выявление ключевых проблем
-- Позитивные моменты
-- Рекомендации для руководства
-
-Результат сохраняется в файл `ai_summary.txt`.
-
-**Примечание:** Если GigaChat не установлен или не настроен, приложение продолжит работу без AI анализа.
-
-## 📝 Примеры использования
-
-### Анализ за конкретный период
-
-Отфильтруйте CSV файл перед запуском или добавьте параметры в код:
-
-```python
-# В методе load_data()
-self.df = self.df[
-    (self.df['timestamp'] >= '2025-10-01') & 
-    (self.df['timestamp'] <= '2025-10-31')
-]
-```
-
-### Экспорт в разные форматы
-
-```python
-# В методе run()
-self.generate_excel_report('report.xlsx')
-self.generate_csv_report('report.csv')  # Добавьте свой метод
-```
-
-## 🐛 Устранение проблем
-
-**Ошибка: FileNotFoundError**
-- Проверьте, что файлы `logs/attendance.csv` и `path/person_prefs.json` существуют
-- Убедитесь, что вы запускаете скрипт из корневой папки проекта
-
-**Ошибка: KeyError при чтении JSON**
-- Проверьте формат JSON (должны быть двойные кавычки)
-- Убедитесь, что кодировка файла UTF-8
-
-**Пустой отчет**
-- Убедитесь, что имена в CSV соответствуют ключам в JSON
-- Проверьте, что в `person_prefs.json` есть профили пользователей
-
-## 📦 Зависимости
-
-- `pandas>=2.0.0` - обработка данных
-- `openpyxl>=3.1.0` - работа с Excel
-
-## 📜 Лицензия
-
-MIT License
-
-## 👤 Автор
-
-LogStorm Analyzer
-
-## 🤝 Вклад
-
-Приветствуются улучшения и предложения! Создавайте issues и pull requests.
-
-## 📞 Поддержка
-
-По вопросам обращайтесь через issues в репозитории.
+- GUI удален из active scope.
+- AI-интеграция удалена из текущего кода и документации.
+- Старые пути `LogsCam/`, `path/person_prefs.json`, `run_gui.py`, `gui/`,
+  `gui_app.py`, `gui_config.py`, `gui_app_fluent.py`, `config.json`,
+  `config.py` не являются актуальной структурой.

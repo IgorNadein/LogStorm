@@ -4,7 +4,9 @@
 .env
 *.env
 secrets.json
+config.json
 config.local.json
+collector.local.py
 
 # Результаты работы
 attendance_report.xlsx
@@ -51,19 +53,26 @@ env/
 .ipynb_checkpoints
 
 # Данные (не коммитить рабочие данные)
-data/
+data/*
 logs/*.ndjson
 logs/*.csv
 logs/*.log
 reports/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 # Сохраняем примеры
 !data/.gitkeep
+!data/person.sample.json
 !logs/.gitkeep
 !reports/.gitkeep
 
 # Collector (конфиг с паролями)
 collector/collector.json
+collector/collector.local.py
 collector/collector.log
 collector/collector_state.json
 collector/__pycache__/

@@ -167,6 +167,45 @@ def test_attendance_event_photo_returns_saved_file(tmp_path):
     assert response.headers["content-type"] == "image/jpeg"
 
 
+def test_attendance_event_photo_rewrites_unc_path_to_local_mount(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    image_path = tmp_path / "data" / "images" / "event.jpg"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"fake-jpeg")
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        {
+            **_event(serial=1, timestamp="2026-04-20T09:00:00"),
+            "_imagePath": (
+                "\\\\172.11.1.254\\Face_ID\\data\\images\\event.jpg"
+            ),
+        }
+    ])
+    core = LogStormCore.from_sources(
+        env={
+            "LOGSTORM_PHOTO_PATH_REWRITES": (
+                "//172.11.1.254/Face_ID=" + str(tmp_path)
+            ),
+        },
+        collector_db_path=str(sqlite_path),
+        api_token="secret",
+    )
+    client = TestClient(create_app(core=core))
+    events_response = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+        headers={"Authorization": "Bearer secret"},
+    )
+    event_key = events_response.json()[0]["event_key"]
+
+    response = client.get(
+        f"/attendance/events/photos/{event_key}/",
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"fake-jpeg"
+
+
 def test_attendance_event_photo_returns_404_without_saved_file(tmp_path):
     sqlite_path = tmp_path / "events.db"
     storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))

@@ -159,6 +159,7 @@ ALLOW_DEFAULT_SCHEDULE = os.getenv(
     "LOGSTORM_ALLOW_DEFAULT_SCHEDULE",
     "true",
 ).lower() in {"1", "true", "yes", "on"}
+PHOTO_PATH_REWRITES = os.getenv("LOGSTORM_PHOTO_PATH_REWRITES", "")
 
 def _env_bool(env: Mapping[str, str], name: str, default: bool) -> bool:
     raw = env.get(name)
@@ -179,6 +180,20 @@ def _env_csv(env: Mapping[str, str], name: str, default: list[str]) -> list[str]
     if raw is None:
         return list(default)
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_path_rewrites(env: Mapping[str, str]) -> list[tuple[str, str]]:
+    raw = env.get("LOGSTORM_PHOTO_PATH_REWRITES", PHOTO_PATH_REWRITES)
+    rewrites = []
+    for item in raw.split(";"):
+        if not item.strip() or "=" not in item:
+            continue
+        source, target = item.split("=", 1)
+        source = source.strip()
+        target = target.strip()
+        if source and target:
+            rewrites.append((source, target))
+    return rewrites
 
 
 def build_default_schedule(env: Optional[Mapping[str, str]] = None) -> dict:
@@ -230,6 +245,7 @@ def build_settings(
                 True,
             ),
             default_schedule=build_default_schedule(resolved_env),
+            photo_path_rewrites=_env_path_rewrites(resolved_env),
         ),
         collector=SimpleNamespace(
             ndjson_path=resolved_env.get(

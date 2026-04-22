@@ -50,6 +50,7 @@ def create_app(
     app.state.allow_default_schedule = (
         runtime.settings.api.allow_default_schedule
     )
+    app.state.photo_path_rewrites = runtime.settings.api.photo_path_rewrites
 
     @app.get("/health")
     def health():
@@ -148,8 +149,11 @@ def create_app(
                 detail="Event photo not found",
             )
 
-        path = Path(str(image_path)).expanduser()
-        if not path.is_file():
+        path = _find_existing_photo_path(
+            str(image_path),
+            app.state.photo_path_rewrites,
+        )
+        if path is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Event photo file not found",
@@ -224,6 +228,42 @@ def _decode_event_key(event_key: str) -> tuple[str, int]:
             detail="Event not found",
         ) from exc
     return device, serial_no
+
+
+def _find_existing_photo_path(
+    image_path: str,
+    rewrites: list[tuple[str, str]],
+) -> Optional[Path]:
+    for candidate in _photo_path_candidates(image_path, rewrites):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _photo_path_candidates(
+    image_path: str,
+    rewrites: list[tuple[str, str]],
+) -> list[Path]:
+    candidates = [Path(image_path).expanduser()]
+    normalized_path = _normalize_photo_path(image_path)
+    for source, target in rewrites:
+        normalized_source = _normalize_photo_path(source).rstrip("/")
+        if not normalized_source:
+            continue
+        if (
+            normalized_path == normalized_source
+            or normalized_path.startswith(f"{normalized_source}/")
+        ):
+            suffix = normalized_path[len(normalized_source):].lstrip("/")
+            rewritten = Path(target).expanduser()
+            if suffix:
+                rewritten = rewritten.joinpath(*suffix.split("/"))
+            candidates.append(rewritten)
+    return candidates
+
+
+def _normalize_photo_path(value: str) -> str:
+    return str(value).replace("\\", "/").rstrip("/")
 
 
 def _event_to_day_event(event: dict[str, Any]) -> dict[str, Any]:

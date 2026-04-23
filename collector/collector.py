@@ -342,9 +342,9 @@ def build_request_conditions(
 def build_backfill_request_conditions(
     event: Dict[str, Any],
     config: Dict[str, Any],
-    window_minutes: int = 5,
+    window_minutes: int = 15,
 ) -> Dict[str, Any]:
-    """Построение узкого запроса для догрузки фото по старому событию."""
+    """Построение совместимого с обычным сбором запроса для backfill фото."""
     serial = event.get("serialNo")
     event_time = event.get("time")
     if serial is None or not event_time:
@@ -357,21 +357,33 @@ def build_backfill_request_conditions(
     end_time = (dt + timedelta(minutes=window_minutes)).strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
-    req = config.get("request", {})
+    cond = build_request_conditions(
+        start_time,
+        end_time,
+        int(serial),
+        config,
+        save_images=True,
+    )
+    cond["searchID"] = "collector"
+    return cond
 
-    return {
-        "searchID": "collector-photo-backfill",
-        "searchResultPosition": 0,
-        "maxResults": max(1, min(req.get("page_size", 30), 16)),
-        "major": req.get("major", 5),
-        "minor": req.get("minor", 0),
-        "startTime": start_time,
-        "endTime": end_time,
-        "picEnable": True,
-        "timeReverseOrder": False,
-        "beginSerialNo": int(serial),
-        "endSerialNo": int(serial),
-    }
+
+def event_identity_matches(
+    expected_event: Dict[str, Any],
+    candidate_event: Dict[str, Any],
+) -> bool:
+    """Сопоставить событие backfill по event id, если он есть, иначе по serial."""
+    for key in ("eventID", "eventId", "event_id"):
+        expected_id = expected_event.get(key)
+        candidate_id = candidate_event.get(key)
+        if expected_id is not None and candidate_id is not None:
+            return str(expected_id) == str(candidate_id)
+
+    expected_serial = expected_event.get("serialNo")
+    candidate_serial = candidate_event.get("serialNo")
+    if expected_serial is None or candidate_serial is None:
+        return False
+    return int(expected_serial) == int(candidate_serial)
 
 
 def parse_multipart_response(
@@ -648,7 +660,7 @@ def backfill_event_image(
     event: Dict[str, Any],
     config: Dict[str, Any],
     logger: logging.Logger,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[str]:
     """Попытаться догрузить фото для уже сохранённого события."""
     host = device["host"]
     device_name = device.get("name", host)
@@ -707,7 +719,7 @@ def backfill_event_image(
         fetched_events = payload.get("AcsEvent", {}).get("InfoList", [])
         matched_event = None
         for candidate in fetched_events:
-            if int(candidate.get("serialNo", -1)) == int(serial):
+            if event_identity_matches(event, candidate):
                 matched_event = candidate
                 break
         if matched_event is None:
@@ -721,15 +733,7 @@ def backfill_event_image(
             session,
             logger,
         )
-        if not matched_event.get("_imagePath"):
-            return None
-
-        updated_event = dict(event)
-        updated_event.update(matched_event)
-        updated_event["_device"] = event.get("_device", host)
-        updated_event["_device_name"] = event.get("_device_name", device_name)
-        updated_event["_collected"] = event.get("_collected", "")
-        return updated_event
+        return matched_event.get("_imagePath")
     except Exception as e:
         logger.warning(
             f"    [{device_name}][WARN] Не удалось догрузить фото для serial "
@@ -988,17 +992,25 @@ class Collector:
                 skipped_count += 1
                 continue
 
-            updated_event = backfill_event_image(
+            image_path = backfill_event_image(
                 device_map[host],
                 event,
                 self.config,
                 self.logger,
             )
-            if updated_event is None:
+            if not image_path:
                 skipped_count += 1
                 continue
 
-            self.storage.update_event(updated_event)
+            updated = self.storage.update_event_image(
+                host,
+                int(serial),
+                image_path,
+            )
+            if not updated:
+                skipped_count += 1
+                continue
+
             updated_count += 1
             self.logger.info(
                 f"    [OK] {device_map[host].get('name', host)}: "

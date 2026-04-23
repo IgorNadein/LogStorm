@@ -32,9 +32,10 @@ python collector.py --backfill-images --backfill-limit 500 --verbose
 
 Что делает backfill:
 - читает события из SQLite без `_imagePath`
-- перепроверяет их на камере по узкому диапазону `serialNo/time`
+- перепроверяет их на камере запросом, совместимым с обычной синхронизацией,
+  и ищет точное совпадение по `eventID` (если есть) или `serialNo`
 - сохраняет найденные фото в папку `images.folder`
-- обновляет `event_data` в SQLite
+- обновляет только `_imagePath` в `event_data` SQLite
 
 Ограничение:
 - NDJSON не переписывается, backfill обновляет только SQLite

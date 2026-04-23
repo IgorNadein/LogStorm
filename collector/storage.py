@@ -323,6 +323,47 @@ class EventStorage:
         finally:
             conn.close()
 
+    def update_event_image(
+        self,
+        device: str,
+        serial_no: int,
+        image_path: str,
+    ) -> bool:
+        """
+        Обновить только путь к изображению в event_data существующего события.
+
+        Возвращает True, если событие найдено и обновлено.
+        """
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+        try:
+            cursor = conn.execute(
+                'SELECT event_data FROM events WHERE device = ? AND serialNo = ?',
+                (device, serial_no),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+
+            try:
+                event = json.loads(row[0])
+            except json.JSONDecodeError:
+                return False
+
+            event['_imagePath'] = image_path
+
+            conn.execute(
+                'UPDATE events SET event_data = ? WHERE device = ? AND serialNo = ?',
+                (
+                    json.dumps(event, ensure_ascii=False),
+                    device,
+                    serial_no,
+                )
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
     def rebuild_sqlite_from_ndjson(self, progress_callback=None) -> int:
         """
         Восстановить SQLite БД из NDJSON файла

@@ -7,6 +7,7 @@ one resolved settings object from ``build_settings``.
 
 from __future__ import annotations
 
+import json
 import os
 from types import SimpleNamespace
 from typing import Mapping, Optional
@@ -102,78 +103,6 @@ SHEET_MAIN_REPORT = "Отчет по дням"
 SHEET_SUSPICIOUS = "Подозрительные случаи"
 SHEET_MONTH_PREFIX = "Месяц "
 
-# Collector defaults.
-def _collector_db_setting(
-    env: Mapping[str, str] | None = None,
-    *,
-    override: str | None = None,
-) -> str:
-    resolved_env = os.environ if env is None else env
-    return (
-        override
-        or resolved_env.get("LOGSTORM_COLLECTOR_DB_URL")
-        or resolved_env.get("LOGSTORM_COLLECTOR_DB_PATH")
-        or "events.db"
-    )
-
-
-COLLECTOR_NDJSON_PATH = os.getenv(
-    "LOGSTORM_COLLECTOR_NDJSON_PATH",
-    "events.ndjson",
-)
-COLLECTOR_DB_PATH = _collector_db_setting()
-COLLECTOR_LOG_FILE = os.getenv("LOGSTORM_COLLECTOR_LOG_FILE", "collector.log")
-COLLECTOR_INTERVAL_MINUTES = int(
-    os.getenv("LOGSTORM_COLLECTOR_INTERVAL_MINUTES", "15")
-)
-COLLECTOR_MAX_PARALLEL = int(os.getenv("LOGSTORM_COLLECTOR_MAX_PARALLEL", "4"))
-COLLECTOR_INITIAL_DAYS = int(os.getenv("LOGSTORM_COLLECTOR_INITIAL_DAYS", "30"))
-COLLECTOR_REQUEST = {
-    "page_size": int(os.getenv("LOGSTORM_COLLECTOR_PAGE_SIZE", "30")),
-    "timeout": int(os.getenv("LOGSTORM_COLLECTOR_TIMEOUT_SECONDS", "180")),
-    "retries": int(os.getenv("LOGSTORM_COLLECTOR_RETRIES", "3")),
-    "major": int(os.getenv("LOGSTORM_COLLECTOR_EVENT_MAJOR", "5")),
-    "minor": int(os.getenv("LOGSTORM_COLLECTOR_EVENT_MINOR", "0")),
-}
-COLLECTOR_IMAGES = {
-    "enabled": os.getenv(
-        "LOGSTORM_COLLECTOR_IMAGES_ENABLED",
-        "false",
-    ).lower() in {"1", "true", "yes", "on"},
-    "folder": os.getenv("LOGSTORM_COLLECTOR_IMAGES_FOLDER", "images"),
-    "format": os.getenv(
-        "LOGSTORM_COLLECTOR_IMAGES_FORMAT",
-        "{date}/{employeeNoString}_{serialNo}.jpg",
-    ),
-}
-COLLECTOR_DEVICES = [
-    {
-        "name": os.getenv("LOGSTORM_DEVICE_1_NAME", "Камера входа"),
-        "host": os.getenv("LOGSTORM_DEVICE_1_HOST", "192.168.1.101"),
-        "user": os.getenv("LOGSTORM_DEVICE_1_USER", "admin"),
-        "password": os.getenv("LOGSTORM_DEVICE_1_PASSWORD", "password"),
-        "enabled": os.getenv(
-            "LOGSTORM_DEVICE_1_ENABLED",
-            "true",
-        ).lower() in {"1", "true", "yes", "on"},
-    },
-    {
-        "name": os.getenv("LOGSTORM_DEVICE_2_NAME", "Камера выхода"),
-        "host": os.getenv("LOGSTORM_DEVICE_2_HOST", "192.168.1.102"),
-        "user": os.getenv("LOGSTORM_DEVICE_2_USER", "admin"),
-        "password": os.getenv("LOGSTORM_DEVICE_2_PASSWORD", "password"),
-        "enabled": os.getenv(
-            "LOGSTORM_DEVICE_2_ENABLED",
-            "true",
-        ).lower() in {"1", "true", "yes", "on"},
-    },
-]
-API_TOKEN = os.getenv("LOGSTORM_API_TOKEN", "")
-ALLOW_DEFAULT_SCHEDULE = os.getenv(
-    "LOGSTORM_ALLOW_DEFAULT_SCHEDULE",
-    "true",
-).lower() in {"1", "true", "yes", "on"}
-PHOTO_PATH_REWRITES = os.getenv("LOGSTORM_PHOTO_PATH_REWRITES", "")
 
 def _env_bool(env: Mapping[str, str], name: str, default: bool) -> bool:
     raw = env.get(name)
@@ -194,6 +123,157 @@ def _env_csv(env: Mapping[str, str], name: str, default: list[str]) -> list[str]
     if raw is None:
         return list(default)
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+# Collector defaults.
+def _collector_db_setting(
+    env: Mapping[str, str] | None = None,
+    *,
+    override: str | None = None,
+) -> str:
+    resolved_env = os.environ if env is None else env
+    return (
+        override
+        or resolved_env.get("LOGSTORM_COLLECTOR_DB_URL")
+        or resolved_env.get("LOGSTORM_COLLECTOR_DB_PATH")
+        or "events.db"
+    )
+
+
+DEFAULT_COLLECTOR_DEVICES = [
+    {
+        "name": "Камера входа",
+        "host": "192.168.1.101",
+        "user": "admin",
+        "password": "CHANGE_ME",
+        "enabled": True,
+    },
+    {
+        "name": "Камера выхода",
+        "host": "192.168.1.102",
+        "user": "admin",
+        "password": "CHANGE_ME",
+        "enabled": True,
+    },
+]
+
+
+def _build_collector_request(env: Mapping[str, str]) -> dict[str, int]:
+    return {
+        "page_size": int(env.get("LOGSTORM_COLLECTOR_PAGE_SIZE", "30")),
+        "timeout": int(env.get("LOGSTORM_COLLECTOR_TIMEOUT_SECONDS", "180")),
+        "retries": int(env.get("LOGSTORM_COLLECTOR_RETRIES", "3")),
+        "major": int(env.get("LOGSTORM_COLLECTOR_EVENT_MAJOR", "5")),
+        "minor": int(env.get("LOGSTORM_COLLECTOR_EVENT_MINOR", "0")),
+    }
+
+
+def _build_collector_images(env: Mapping[str, str]) -> dict[str, object]:
+    images = {
+        "enabled": _env_bool(env, "LOGSTORM_COLLECTOR_IMAGES_ENABLED", False),
+        "folder": env.get("LOGSTORM_COLLECTOR_IMAGES_FOLDER", "images"),
+        "format": env.get(
+            "LOGSTORM_COLLECTOR_IMAGES_FORMAT",
+            "{date}/{employeeNoString}_{serialNo}.jpg",
+        ),
+    }
+    unc_path = env.get("LOGSTORM_COLLECTOR_IMAGES_UNC_PATH")
+    if unc_path:
+        images["unc_path"] = unc_path
+    return images
+
+
+def _device_prefix_present(env: Mapping[str, str], index: int) -> bool:
+    prefix = f"LOGSTORM_DEVICE_{index}_"
+    return any(key.startswith(prefix) for key in env)
+
+
+def _build_indexed_device(
+    env: Mapping[str, str],
+    index: int,
+    default: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    fallback = dict(default or {})
+    default_save_images = bool(
+        fallback.get(
+            "save_images",
+            _env_bool(env, "LOGSTORM_COLLECTOR_IMAGES_ENABLED", False),
+        )
+    )
+    return {
+        "name": env.get(
+            f"LOGSTORM_DEVICE_{index}_NAME",
+            str(fallback.get("name", f"Камера {index}")),
+        ),
+        "host": env.get(
+            f"LOGSTORM_DEVICE_{index}_HOST",
+            str(fallback.get("host", "")),
+        ),
+        "user": env.get(
+            f"LOGSTORM_DEVICE_{index}_USER",
+            str(fallback.get("user", "admin")),
+        ),
+        "password": env.get(
+            f"LOGSTORM_DEVICE_{index}_PASSWORD",
+            str(fallback.get("password", "password")),
+        ),
+        "enabled": _env_bool(
+            env,
+            f"LOGSTORM_DEVICE_{index}_ENABLED",
+            bool(fallback.get("enabled", True)),
+        ),
+        "save_images": _env_bool(
+            env,
+            f"LOGSTORM_DEVICE_{index}_SAVE_IMAGES",
+            default_save_images,
+        ),
+    }
+
+
+def _build_collector_devices(env: Mapping[str, str]) -> list[dict[str, object]]:
+    raw = env.get("LOGSTORM_COLLECTOR_DEVICES_JSON")
+    if raw:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list) or not all(
+            isinstance(item, dict) for item in parsed
+        ):
+            raise ValueError(
+                "LOGSTORM_COLLECTOR_DEVICES_JSON must be a JSON array of objects"
+            )
+        return [dict(item) for item in parsed]
+
+    devices = [
+        _build_indexed_device(env, index, default)
+        for index, default in enumerate(DEFAULT_COLLECTOR_DEVICES, start=1)
+    ]
+
+    for index in range(len(DEFAULT_COLLECTOR_DEVICES) + 1, 17):
+        if _device_prefix_present(env, index):
+            devices.append(_build_indexed_device(env, index))
+
+    return devices
+
+
+COLLECTOR_NDJSON_PATH = os.getenv(
+    "LOGSTORM_COLLECTOR_NDJSON_PATH",
+    "events.ndjson",
+)
+COLLECTOR_DB_PATH = _collector_db_setting()
+COLLECTOR_LOG_FILE = os.getenv("LOGSTORM_COLLECTOR_LOG_FILE", "collector.log")
+COLLECTOR_INTERVAL_MINUTES = int(
+    os.getenv("LOGSTORM_COLLECTOR_INTERVAL_MINUTES", "15")
+)
+COLLECTOR_MAX_PARALLEL = int(os.getenv("LOGSTORM_COLLECTOR_MAX_PARALLEL", "4"))
+COLLECTOR_INITIAL_DAYS = int(os.getenv("LOGSTORM_COLLECTOR_INITIAL_DAYS", "30"))
+COLLECTOR_REQUEST = _build_collector_request(os.environ)
+COLLECTOR_IMAGES = _build_collector_images(os.environ)
+COLLECTOR_DEVICES = _build_collector_devices(os.environ)
+API_TOKEN = os.getenv("LOGSTORM_API_TOKEN", "")
+ALLOW_DEFAULT_SCHEDULE = os.getenv(
+    "LOGSTORM_ALLOW_DEFAULT_SCHEDULE",
+    "true",
+).lower() in {"1", "true", "yes", "on"}
+PHOTO_PATH_REWRITES = os.getenv("LOGSTORM_PHOTO_PATH_REWRITES", "")
 
 
 def _env_path_rewrites(env: Mapping[str, str]) -> list[tuple[str, str]]:
@@ -285,9 +365,9 @@ def build_settings(
                 "LOGSTORM_COLLECTOR_INITIAL_DAYS",
                 str(COLLECTOR_INITIAL_DAYS),
             )),
-            devices=COLLECTOR_DEVICES,
-            request=COLLECTOR_REQUEST,
-            images=COLLECTOR_IMAGES,
+            devices=_build_collector_devices(resolved_env),
+            request=_build_collector_request(resolved_env),
+            images=_build_collector_images(resolved_env),
         ),
         cli=SimpleNamespace(
             logs_file=LOGS_FILE,

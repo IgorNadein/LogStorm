@@ -64,6 +64,8 @@ def test_core_builds_collector_settings_from_env():
         "LOGSTORM_COLLECTOR_INTERVAL_MINUTES": "5",
         "LOGSTORM_COLLECTOR_MAX_PARALLEL": "2",
         "LOGSTORM_COLLECTOR_INITIAL_DAYS": "7",
+        "LOGSTORM_COLLECTOR_IMAGES_UNC_PATH": "//server/share/images",
+        "LOGSTORM_COLLECTOR_IMAGES_ENABLED": "true",
     })
 
     assert settings.collector.sqlite_path == "/tmp/events.db"
@@ -72,6 +74,8 @@ def test_core_builds_collector_settings_from_env():
     assert settings.collector.interval_minutes == 5
     assert settings.collector.max_parallel == 2
     assert settings.collector.initial_days == 7
+    assert settings.collector.images["enabled"] is True
+    assert settings.collector.images["unc_path"] == "//server/share/images"
 
 
 def test_core_explicit_api_settings_override_env():
@@ -86,3 +90,49 @@ def test_core_explicit_api_settings_override_env():
 
     assert settings.api.collector_db_path == "/explicit/events.db"
     assert settings.api.api_token == "explicit-token"
+
+
+def test_core_builds_collector_devices_from_json_env():
+    settings = build_settings(env={
+        "LOGSTORM_COLLECTOR_DEVICES_JSON": """
+[
+  {
+    "name": "Камера входа",
+    "host": "192.168.1.101",
+    "user": "admin",
+    "password": "CHANGE_ME",
+    "enabled": true,
+    "save_images": true
+  },
+  {
+    "name": "Камера выхода",
+    "host": "192.168.1.104",
+    "user": "admin",
+    "password": "CHANGE_ME",
+    "enabled": true,
+    "save_images": true
+  },
+  {
+    "name": "Камера 2",
+    "host": "192.168.1.102",
+    "user": "admin",
+    "password": "CHANGE_ME",
+    "enabled": true,
+    "save_images": true
+  },
+  {
+    "name": "Камера 3",
+    "host": "192.168.1.103",
+    "user": "admin",
+    "password": "CHANGE_ME",
+    "enabled": true,
+    "save_images": true
+  }
+]
+""".strip(),
+    })
+
+    assert len(settings.collector.devices) == 4
+    assert settings.collector.devices[1]["host"] == "192.168.1.104"
+    assert settings.collector.devices[3]["name"] == "Камера 3"
+    assert settings.collector.devices[0]["save_images"] is True

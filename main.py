@@ -106,6 +106,10 @@ def run_collector(args: argparse.Namespace) -> None:
         collector_args.append("--once")
     if args.init:
         collector_args.append("--init")
+    if args.backfill_images:
+        collector_args.append("--backfill-images")
+    if args.backfill_limit is not None:
+        collector_args.extend(["--backfill-limit", str(args.backfill_limit)])
     if args.verbose:
         collector_args.append("--verbose")
     collector_main(collector_args)
@@ -156,6 +160,8 @@ def build_parser() -> argparse.ArgumentParser:
     collector.add_argument("--config", "-c", default="collector.local.py")
     collector.add_argument("--once", action="store_true")
     collector.add_argument("--init", action="store_true")
+    collector.add_argument("--backfill-images", action="store_true")
+    collector.add_argument("--backfill-limit", type=int)
     collector.add_argument("--verbose", "-v", action="store_true")
     collector.set_defaults(func=run_collector)
 

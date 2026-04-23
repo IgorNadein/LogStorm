@@ -17,6 +17,30 @@ python collector.py --once --verbose
 python collector.py
 ```
 
+## Догрузка фотографий для старых событий
+
+Если камера уже начала отдавать фото, а коллектор в тот период работал без
+`images.enabled`, можно выполнить разовый backfill по SQLite:
+
+```bash
+# Проверить старые события без _imagePath и попробовать догрузить фото
+python collector.py --backfill-images --verbose
+
+# Ограничить количество проверяемых событий
+python collector.py --backfill-images --backfill-limit 500 --verbose
+```
+
+Что делает backfill:
+- читает события из SQLite без `_imagePath`
+- перепроверяет их на камере по узкому диапазону `serialNo/time`
+- сохраняет найденные фото в папку `images.folder`
+- обновляет `event_data` в SQLite
+
+Ограничение:
+- NDJSON не переписывается, backfill обновляет только SQLite
+- если потом пересобрать SQLite из NDJSON, пути к догруженным фото нужно будет
+  восстановить повторным backfill
+
 ## Развёртывание
 
 ### Linux (systemd)

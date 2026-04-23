@@ -73,6 +73,35 @@ def test_storage_replaces_duplicate_in_sqlite_but_keeps_raw_ndjson(tmp_path):
     assert storage.get_last_serial("door-1") == 7
 
 
+def test_storage_iter_events_without_images_and_update_event(tmp_path):
+    ndjson = tmp_path / "events.ndjson"
+    storage = EventStorage(str(ndjson))
+    storage.write_events([
+        _event(serial=1),
+        {
+            **_event(serial=2),
+            "_imagePath": str(tmp_path / "images" / "2.jpg"),
+        },
+    ])
+
+    missing = list(storage.iter_events_without_images())
+
+    assert [event["serialNo"] for event in missing] == [1]
+
+    updated = {
+        **missing[0],
+        "_imagePath": str(tmp_path / "images" / "1.jpg"),
+    }
+    storage.update_event(updated)
+
+    missing_after_update = list(storage.iter_events_without_images())
+    assert missing_after_update == []
+
+    repo = CollectorEventRepository(str(storage.sqlite_path))
+    saved = repo.get_event(device="door-1", serial_no=1).to_event_dict()
+    assert saved["_imagePath"].endswith("1.jpg")
+
+
 def test_collector_state_roundtrip(tmp_path):
     storage = EventStorage(str(tmp_path / "events.ndjson"))
 

@@ -339,6 +339,41 @@ def build_request_conditions(
     }
 
 
+def build_backfill_request_conditions(
+    event: Dict[str, Any],
+    config: Dict[str, Any],
+    window_minutes: int = 5,
+) -> Dict[str, Any]:
+    """Построение узкого запроса для догрузки фото по старому событию."""
+    serial = event.get("serialNo")
+    event_time = event.get("time")
+    if serial is None or not event_time:
+        raise ValueError("Событие должно содержать serialNo и time")
+
+    dt = datetime.fromisoformat(str(event_time).replace("Z", "+00:00"))
+    start_time = (dt - timedelta(minutes=window_minutes)).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
+    end_time = (dt + timedelta(minutes=window_minutes)).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
+    req = config.get("request", {})
+
+    return {
+        "searchID": "collector-photo-backfill",
+        "searchResultPosition": 0,
+        "maxResults": max(1, min(req.get("page_size", 30), 16)),
+        "major": req.get("major", 5),
+        "minor": req.get("minor", 0),
+        "startTime": start_time,
+        "endTime": end_time,
+        "picEnable": True,
+        "timeReverseOrder": False,
+        "beginSerialNo": int(serial),
+        "endSerialNo": int(serial),
+    }
+
+
 def parse_multipart_response(
     resp: requests.Response,
     save_images: bool,
@@ -608,6 +643,103 @@ def fetch_events_from_device(
     )
 
 
+def backfill_event_image(
+    device: Dict[str, Any],
+    event: Dict[str, Any],
+    config: Dict[str, Any],
+    logger: logging.Logger,
+) -> Optional[Dict[str, Any]]:
+    """Попытаться догрузить фото для уже сохранённого события."""
+    host = device["host"]
+    device_name = device.get("name", host)
+    user = device["user"]
+    password = device["password"]
+    req = config.get("request", {})
+    images_cfg = config.get("images", {})
+
+    serial = event.get("serialNo")
+    if serial is None or event.get("_imagePath"):
+        return None
+
+    base_url = f"http://{host}"
+    auth = HTTPDigestAuth(user, password)
+    session = requests.Session()
+    session.headers.update({"Accept": "application/json"})
+
+    try:
+        cond = build_backfill_request_conditions(event, config)
+        url = f"{base_url}/ISAPI/AccessControl/AcsEvent?format=json"
+        resp = session.post(
+            url,
+            auth=auth,
+            json={"AcsEventCond": cond},
+            timeout=(5, req.get("timeout", 180)),
+        )
+
+        if resp.status_code >= 400:
+            logger.warning(
+                f"    [{device_name}][WARN] Backfill HTTP {resp.status_code} "
+                f"for serial {serial}"
+            )
+            return None
+
+        ct = (resp.headers.get("Content-Type") or "").lower()
+        if "multipart" in ct:
+            payload, images_data = parse_multipart_response(
+                resp,
+                True,
+                logger,
+                device_name,
+            )
+            if payload is None:
+                return None
+        else:
+            payload = resp.json()
+            images_data = {}
+
+        if "statusCode" in payload:
+            logger.warning(
+                f"    [{device_name}][WARN] Backfill rejected by device for "
+                f"serial {serial}: {payload.get('statusString', 'unknown')}"
+            )
+            return None
+
+        fetched_events = payload.get("AcsEvent", {}).get("InfoList", [])
+        matched_event = None
+        for candidate in fetched_events:
+            if int(candidate.get("serialNo", -1)) == int(serial):
+                matched_event = candidate
+                break
+        if matched_event is None:
+            return None
+
+        process_event_images(
+            [matched_event],
+            images_data,
+            images_cfg,
+            auth,
+            session,
+            logger,
+        )
+        if not matched_event.get("_imagePath"):
+            return None
+
+        updated_event = dict(event)
+        updated_event.update(matched_event)
+        updated_event["_device"] = event.get("_device", host)
+        updated_event["_device_name"] = event.get("_device_name", device_name)
+        updated_event["_collected"] = event.get("_collected", "")
+        return updated_event
+    except Exception as e:
+        logger.warning(
+            f"    [{device_name}][WARN] Не удалось догрузить фото для serial "
+            f"{serial}: {type(e).__name__}: {e}"
+        )
+        return None
+    finally:
+        session.close()
+
+
 # ============================================================================
 # СБОРЩИК
 # ============================================================================
@@ -821,6 +953,63 @@ class Collector:
             self.stop_event.wait(interval)
         
         self.logger.info("🛑 Сборщик остановлен")
+
+    def backfill_missing_images(self, limit: Optional[int] = None) -> int:
+        """
+        Догрузить фото для уже собранных событий без `_imagePath`.
+
+        Обновляет только SQLite. NDJSON остаётся неизменяемым журналом.
+        """
+        devices = self.config.get("devices", [])
+        device_map = {
+            device["host"]: device
+            for device in devices
+            if device.get("enabled", True)
+        }
+        if not device_map:
+            self.logger.warning("Нет активных устройств для backfill фотографий")
+            return 0
+
+        missing_events = list(self.storage.iter_events_without_images(limit=limit))
+        if not missing_events:
+            self.logger.info("Событий без фотографий не найдено")
+            return 0
+
+        self.logger.info(
+            f"🖼️ Backfill фотографий: проверяю {len(missing_events)} событий"
+        )
+        updated_count = 0
+        skipped_count = 0
+
+        for event in missing_events:
+            host = event.get("_device")
+            serial = event.get("serialNo")
+            if not host or host not in device_map:
+                skipped_count += 1
+                continue
+
+            updated_event = backfill_event_image(
+                device_map[host],
+                event,
+                self.config,
+                self.logger,
+            )
+            if updated_event is None:
+                skipped_count += 1
+                continue
+
+            self.storage.update_event(updated_event)
+            updated_count += 1
+            self.logger.info(
+                f"    [OK] {device_map[host].get('name', host)}: "
+                f"serial {serial} -> фото сохранено"
+            )
+
+        self.logger.info(
+            f"📊 Backfill завершён: {updated_count} обновлено, "
+            f"{skipped_count} пропущено"
+        )
+        return updated_count
     
     def stop(self) -> None:
         """Остановка сборщика"""
@@ -844,6 +1033,10 @@ def main(argv: Optional[List[str]] = None):
                         help='Создать пример конфигурации')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Подробный вывод')
+    parser.add_argument('--backfill-images', action='store_true',
+                        help='Догрузить фото для уже собранных событий')
+    parser.add_argument('--backfill-limit', type=int, default=None,
+                        help='Ограничить число событий для backfill')
     
     args = parser.parse_args(argv)
     
@@ -892,7 +1085,9 @@ def main(argv: Optional[List[str]] = None):
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    if args.once:
+    if args.backfill_images:
+        collector.backfill_missing_images(limit=args.backfill_limit)
+    elif args.once:
         collector.collect_once()
     else:
         collector.run_loop()

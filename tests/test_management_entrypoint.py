@@ -51,6 +51,9 @@ def test_collector_command_forwards_arguments(monkeypatch):
         "--config",
         "collector/test.py",
         "--once",
+        "--backfill-images",
+        "--backfill-limit",
+        "500",
         "--verbose",
     ])
 
@@ -58,5 +61,8 @@ def test_collector_command_forwards_arguments(monkeypatch):
         "--config",
         "collector/test.py",
         "--once",
+        "--backfill-images",
+        "--backfill-limit",
+        "500",
         "--verbose",
     ]

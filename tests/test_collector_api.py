@@ -5,8 +5,11 @@ import pytest
 import requests
 
 from collector.collector import (
+    Collector,
     DEFAULT_CONFIG,
     EventTracker,
+    backfill_event_image,
+    build_backfill_request_conditions,
     fetch_events_from_device,
     build_request_conditions,
     load_config,
@@ -61,6 +64,23 @@ def test_build_request_conditions_extends_end_time_and_uses_request_config():
     assert cond["beginSerialNo"] == 123
     assert cond["picEnable"] is True
     assert cond["endTime"] == "2026-04-22T00:00:00"
+
+
+def test_build_backfill_request_conditions_uses_exact_serial_and_time_window():
+    cond = build_backfill_request_conditions(
+        {
+            "serialNo": 123,
+            "time": "2026-04-21T12:30:00+03:00",
+        },
+        _config(),
+        window_minutes=3,
+    )
+
+    assert cond["beginSerialNo"] == 123
+    assert cond["endSerialNo"] == 123
+    assert cond["picEnable"] is True
+    assert cond["startTime"] == "2026-04-21T12:27:00"
+    assert cond["endTime"] == "2026-04-21T12:33:00"
 
 
 def test_event_tracker_uses_storage_state(tmp_path):
@@ -294,3 +314,96 @@ def test_fetch_events_without_employee_or_serial_is_preserved(monkeypatch):
     assert result.completed is True
     assert result.events == [{"time": "2026-04-20T09:00:00"}]
     assert result.last_serial == 5
+
+
+def test_backfill_event_image_updates_event_when_camera_returns_photo(monkeypatch):
+    session = _FakeSession([
+        _FakeResponse(payload=_payload([
+            {
+                "serialNo": 10,
+                "time": "2026-04-20T09:00:00",
+                "employeeNoString": "100",
+                "pictureURL": "cid:photo-1",
+            }
+        ]), content_type="multipart/mixed"),
+    ])
+    monkeypatch.setattr("collector.collector.requests.Session", lambda: session)
+    monkeypatch.setattr(
+        "collector.collector.parse_multipart_response",
+        lambda *args, **kwargs: (
+            _payload([
+                {
+                    "serialNo": 10,
+                    "time": "2026-04-20T09:00:00",
+                    "employeeNoString": "100",
+                    "pictureURL": "cid:photo-1",
+                }
+            ]),
+            {"cid:photo-1": b"image"},
+        ),
+    )
+
+    def _fake_process_event_images(events, *args, **kwargs):
+        events[0]["_imagePath"] = "images/100_10.jpg"
+        return 1
+
+    monkeypatch.setattr(
+        "collector.collector.process_event_images",
+        _fake_process_event_images,
+    )
+
+    updated = backfill_event_image(
+        _device(),
+        {
+            "_device": "camera.local",
+            "_device_name": "Entrance",
+            "_collected": "2026-04-20T10:00:00",
+            "serialNo": 10,
+            "time": "2026-04-20T09:00:00",
+            "employeeNoString": "100",
+        },
+        _config(),
+        _logger(),
+    )
+
+    assert updated["_imagePath"] == "images/100_10.jpg"
+    assert updated["_device"] == "camera.local"
+    assert session.closed is True
+
+
+def test_collector_backfills_missing_images_in_sqlite(tmp_path, monkeypatch):
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(tmp_path / "events.db"))
+    storage.write_events([
+        {
+            "_device": "camera.local",
+            "_device_name": "Entrance",
+            "_collected": "2026-04-20T10:00:00",
+            "serialNo": 10,
+            "time": "2026-04-20T09:00:00",
+            "employeeNoString": "100",
+        }
+    ])
+    config = {
+        **_config(),
+        "storage": {
+            "ndjson": str(tmp_path / "events.ndjson"),
+            "sqlite": str(tmp_path / "events.db"),
+        },
+        "devices": [_device()],
+    }
+
+    monkeypatch.setattr(
+        "collector.collector.backfill_event_image",
+        lambda device, event, config, logger: {
+            **event,
+            "_imagePath": str(tmp_path / "images" / "100_10.jpg"),
+        },
+    )
+
+    collector = Collector(config, _logger())
+
+    updated = collector.backfill_missing_images()
+
+    assert updated == 1
+    events_without_images = list(collector.storage.iter_events_without_images())
+    assert events_without_images == []

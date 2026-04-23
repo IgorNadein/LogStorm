@@ -256,7 +256,73 @@ class EventStorage:
             return cursor.fetchone()[0]
         finally:
             conn.close()
-    
+
+    def iter_events_without_images(
+        self,
+        device: Optional[str] = None,
+        limit: Optional[int] = None,
+    ):
+        """
+        Итерация по событиям без сохранённого пути к изображению.
+
+        Args:
+            device: Устройство (если None - все устройства)
+            limit: Максимальное количество событий
+
+        Yields:
+            Сырые события из event_data
+        """
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+        try:
+            query = (
+                "SELECT event_data FROM events "
+                "WHERE event_data NOT LIKE ?"
+            )
+            params = ['%"_imagePath"%']
+            if device:
+                query += " AND device = ?"
+                params.append(device)
+            query += " ORDER BY device, time, serialNo"
+            if limit is not None:
+                query += " LIMIT ?"
+                params.append(int(limit))
+
+            cursor = conn.execute(query, params)
+            for (event_data,) in cursor:
+                try:
+                    yield json.loads(event_data)
+                except json.JSONDecodeError:
+                    continue
+        finally:
+            conn.close()
+
+    def update_event(self, event: Dict[str, Any]) -> None:
+        """
+        Обновить существующее событие в SQLite.
+
+        NDJSON не переписывается: это append-only журнал сырых событий.
+        """
+        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+        try:
+            conn.execute(
+                'UPDATE events '
+                'SET time = ?, employeeNoString = ?, name = ?, '
+                'event_data = ?, collected_at = ? '
+                'WHERE device = ? AND serialNo = ?',
+                (
+                    event.get('time', ''),
+                    event.get('employeeNoString', ''),
+                    event.get('name', ''),
+                    json.dumps(event, ensure_ascii=False),
+                    event.get('_collected', ''),
+                    event.get('_device', ''),
+                    event.get('serialNo', 0),
+                )
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def rebuild_sqlite_from_ndjson(self, progress_callback=None) -> int:
         """
         Восстановить SQLite БД из NDJSON файла

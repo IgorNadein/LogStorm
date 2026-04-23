@@ -103,11 +103,25 @@ SHEET_SUSPICIOUS = "Подозрительные случаи"
 SHEET_MONTH_PREFIX = "Месяц "
 
 # Collector defaults.
+def _collector_db_setting(
+    env: Mapping[str, str] | None = None,
+    *,
+    override: str | None = None,
+) -> str:
+    resolved_env = os.environ if env is None else env
+    return (
+        override
+        or resolved_env.get("LOGSTORM_COLLECTOR_DB_URL")
+        or resolved_env.get("LOGSTORM_COLLECTOR_DB_PATH")
+        or "events.db"
+    )
+
+
 COLLECTOR_NDJSON_PATH = os.getenv(
     "LOGSTORM_COLLECTOR_NDJSON_PATH",
     "events.ndjson",
 )
-COLLECTOR_DB_PATH = os.getenv("LOGSTORM_COLLECTOR_DB_PATH", "events.db")
+COLLECTOR_DB_PATH = _collector_db_setting()
 COLLECTOR_LOG_FILE = os.getenv("LOGSTORM_COLLECTOR_LOG_FILE", "collector.log")
 COLLECTOR_INTERVAL_MINUTES = int(
     os.getenv("LOGSTORM_COLLECTOR_INTERVAL_MINUTES", "15")
@@ -229,10 +243,9 @@ def build_settings(
     resolved_env = os.environ if env is None else env
     return SimpleNamespace(
         api=SimpleNamespace(
-            collector_db_path=(
-                collector_db_path
-                or resolved_env.get("LOGSTORM_COLLECTOR_DB_PATH")
-                or "events.db"
+            collector_db_path=_collector_db_setting(
+                resolved_env,
+                override=collector_db_path,
             ),
             api_token=(
                 api_token
@@ -252,10 +265,9 @@ def build_settings(
                 "LOGSTORM_COLLECTOR_NDJSON_PATH",
                 COLLECTOR_NDJSON_PATH,
             ),
-            sqlite_path=(
-                collector_db_path
-                or resolved_env.get("LOGSTORM_COLLECTOR_DB_PATH")
-                or COLLECTOR_DB_PATH
+            sqlite_path=_collector_db_setting(
+                resolved_env,
+                override=collector_db_path,
             ),
             log_file=resolved_env.get(
                 "LOGSTORM_COLLECTOR_LOG_FILE",

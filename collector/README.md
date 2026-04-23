@@ -44,6 +44,41 @@ python collector.py --backfill-images --backfill-limit 500 --verbose
 - если потом пересобрать SQLite из NDJSON, пути к догруженным фото нужно будет
   восстановить повторным backfill
 
+## Миграция relational storage в PostgreSQL
+
+Collector storage уже работает через SQLAlchemy, поэтому перенос можно делать
+отдельной management-командой:
+
+```bash
+python main.py collector-migrate \
+  --source-db /path/to/events.db
+```
+
+Куда мигрировать, команда берёт из настроек проекта:
+- `LOGSTORM_COLLECTOR_DB_URL` в `.env` или окружении
+- либо старый ключ совместимости `LOGSTORM_COLLECTOR_DB_PATH`
+
+Например:
+
+```bash
+export LOGSTORM_COLLECTOR_DB_URL=postgresql+psycopg://user:pass@localhost/logstorm
+python main.py collector-migrate --source-db /path/to/events.db
+```
+
+По умолчанию команда отказывается писать в непустой target. Если переносишь в уже
+подготовленную тестовую базу и хочешь заменить содержимое, укажи `--overwrite`.
+
+`--target-db` остаётся как явный override для разовых случаев.
+
+Для подробного прогресса по пакетам:
+
+```bash
+python main.py collector-migrate \
+  --source-db /path/to/events.db \
+  --overwrite \
+  --verbose
+```
+
 ## Развёртывание
 
 ### Linux (systemd)

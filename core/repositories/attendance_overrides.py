@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from core.db import create_collector_engine
 from core.models import AttendanceManualOverride, Base
 
 
@@ -30,14 +29,7 @@ class AttendanceManualOverrideRepository:
 
     @staticmethod
     def _create_engine(db_path_or_url: str) -> Engine:
-        if "://" in db_path_or_url:
-            url = db_path_or_url
-        else:
-            path = Path(db_path_or_url).expanduser()
-            if not path.is_absolute():
-                path = Path.cwd() / path
-            url = f"sqlite:///{quote(str(path))}"
-        return create_engine(url)
+        return create_collector_engine(db_path_or_url)
 
     def upsert(
         self,

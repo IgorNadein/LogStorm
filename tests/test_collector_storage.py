@@ -1,8 +1,14 @@
 import json
 import sqlite3
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from collector.migrate import migrate_collector_storage
 from collector.storage import EventStorage
 from core.repositories import CollectorEventRepository
+from core.db import create_collector_engine
+from core.models import AttendanceManualOverride
 from analyzer import DataLoader, PersonMapper
 
 
@@ -214,3 +220,69 @@ def test_data_loader_reads_sqlite_collector_database(tmp_path):
     assert df.iloc[0]["name"] == "55"
     assert df.iloc[0]["display_name"] == "Employee Delta"
     assert df.iloc[0]["event_type"] == "pass_in"
+
+
+def test_migrate_collector_storage_copies_events_states_and_overrides(tmp_path):
+    source_db = tmp_path / "source.db"
+    target_db = tmp_path / "target.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(source_db))
+    storage.write_events([_event(serial=10), _event(serial=11)])
+    storage.update_collector_state(
+        "door-1",
+        last_serial=11,
+        last_collect="2026-04-21T10:00:00",
+    )
+
+    engine = create_collector_engine(str(source_db))
+    with Session(engine) as session:
+        session.add(
+            AttendanceManualOverride(
+                employee_id="42",
+                date="2026-04-21",
+                patch_data=json.dumps({"status": "present"}),
+                source="test",
+                note="manual",
+                updated_at="2026-04-21T12:00:00",
+            )
+        )
+        session.commit()
+
+    counts = migrate_collector_storage(str(source_db), str(target_db))
+
+    assert counts == {"events": 2, "states": 1, "overrides": 1}
+
+    target_storage = EventStorage(str(tmp_path / "target.ndjson"), str(target_db))
+    assert target_storage.get_event_count() == 2
+    assert target_storage.get_last_serial("door-1") == 11
+    assert target_storage.get_collector_state("door-1")["last_serial"] == 11
+
+    target_engine = create_collector_engine(str(target_db))
+    with Session(target_engine) as session:
+        overrides = list(session.scalars(select(AttendanceManualOverride)))
+        assert len(overrides) == 1
+        assert overrides[0].employee_id == "42"
+
+
+def test_migrate_collector_storage_refuses_non_empty_target_without_overwrite(tmp_path):
+    source_db = tmp_path / "source.db"
+    target_db = tmp_path / "target.db"
+    source_storage = EventStorage(str(tmp_path / "source.ndjson"), str(source_db))
+    target_storage = EventStorage(str(tmp_path / "target.ndjson"), str(target_db))
+    source_storage.write_events([_event(serial=1)])
+    target_storage.write_events([_event(serial=999)])
+
+    try:
+        migrate_collector_storage(str(source_db), str(target_db))
+    except ValueError as exc:
+        assert "not empty" in str(exc)
+    else:  # pragma: no cover - explicit failure path
+        raise AssertionError("Expected target non-empty migration to fail")
+
+    counts = migrate_collector_storage(
+        str(source_db),
+        str(target_db),
+        overwrite=True,
+    )
+
+    assert counts["events"] == 1
+    assert target_storage.get_last_serial("door-1") == 1

@@ -5,7 +5,7 @@
 import json
 from typing import Any, Optional
 
-from sqlalchemy import Integer, Text, UniqueConstraint
+from sqlalchemy import Index, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -17,6 +17,10 @@ class CollectorEvent(Base):
     """Event row collected from an access-control device."""
 
     __tablename__ = "events"
+    __table_args__ = (
+        Index("idx_device_serial", "device", "serialNo"),
+        Index("idx_time", "time"),
+    )
 
     device: Mapped[str] = mapped_column(Text, primary_key=True)
     serialNo: Mapped[int] = mapped_column(Integer, primary_key=True)

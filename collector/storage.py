@@ -1,261 +1,202 @@
 """
-Модуль для работы с хранилищем событий
-Поддерживает одновременную запись в NDJSON и SQLite
+Storage layer for collector events.
+
+Writes raw NDJSON and stores structured state through SQLAlchemy models.
 """
+
+from __future__ import annotations
+
 import json
-import sqlite3
 import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from pathlib import Path
 from threading import Lock
+from typing import Any, Dict, List, Optional
+from urllib.parse import unquote, urlparse
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, sessionmaker
+
+from core.db import build_db_url, create_collector_engine
+from core.models import (
+    AttendanceManualOverride,
+    Base,
+    CollectorEvent,
+    CollectorState,
+)
 
 
 class EventStorage:
-    """Двойное хранилище: NDJSON + SQLite"""
-    
+    """Double storage: NDJSON journal + ORM-backed relational storage."""
+
     def __init__(self, ndjson_path: str, sqlite_path: Optional[str] = None):
         """
         Args:
-            ndjson_path: Путь к NDJSON файлу
-            sqlite_path: Путь к SQLite БД (опционально,
-                по умолчанию рядом с NDJSON)
+            ndjson_path: Path to the append-only NDJSON journal.
+            sqlite_path: Local SQLite path or SQLAlchemy URL for structured DB.
         """
         self.ndjson_path = ndjson_path
-        
-        # SQLite файл рядом с NDJSON, если не указан
         if sqlite_path is None:
             base = os.path.splitext(ndjson_path)[0]
             sqlite_path = f"{base}.db"
-        
+
         self.sqlite_path = sqlite_path
+        self.db_url = build_db_url(sqlite_path)
         self._lock = Lock()
-        
-        # Создаём директории для файлов
-        for path in [ndjson_path, sqlite_path]:
+
+        self._ensure_parent_dirs()
+        self._create_engine()
+        self._init_schema()
+
+    def _ensure_parent_dirs(self) -> None:
+        for path in [self.ndjson_path]:
             directory = os.path.dirname(path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
-        
-        self._init_sqlite()
-    
-    def _init_sqlite(self) -> None:
-        """Инициализация SQLite БД"""
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        
-        # Таблица событий
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS events (
-                device TEXT NOT NULL,
-                serialNo INTEGER NOT NULL,
-                time TEXT NOT NULL,
-                employeeNoString TEXT,
-                name TEXT,
-                event_data TEXT NOT NULL,
-                collected_at TEXT NOT NULL,
-                PRIMARY KEY (device, serialNo)
-            )
-        ''')
-        
-        # Таблица состояния коллектора
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS collector_state (
-                device TEXT PRIMARY KEY,
-                last_serial INTEGER NOT NULL,
-                last_collect TEXT,
-                updated_at TEXT NOT NULL
-            )
-        ''')
 
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS attendance_manual_overrides (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                employee_id TEXT NOT NULL,
-                date TEXT NOT NULL,
-                patch_data TEXT NOT NULL,
-                source TEXT NOT NULL DEFAULT 'eusrr',
-                note TEXT,
-                updated_at TEXT NOT NULL,
-                UNIQUE(employee_id, date)
-            )
-        ''')
-        
-        # Индексы для быстрого поиска
-        conn.execute(
-            'CREATE INDEX IF NOT EXISTS idx_device_serial '
-            'ON events(device, serialNo DESC)'
-        )
-        conn.execute(
-            'CREATE INDEX IF NOT EXISTS idx_time '
-            'ON events(time)'
-        )
+        sqlite_file_path = self._local_sqlite_file_path()
+        if sqlite_file_path is not None and sqlite_file_path.parent:
+            sqlite_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=30000')
-        
-        conn.commit()
-        conn.close()
-    
+    def _create_engine(self) -> None:
+        self.engine = create_collector_engine(self.sqlite_path, timeout=30.0)
+        self.SessionLocal = sessionmaker(self.engine, expire_on_commit=False)
+
+    def _storage_tables(self) -> list[Any]:
+        return [
+            CollectorEvent.__table__,
+            CollectorState.__table__,
+            AttendanceManualOverride.__table__,
+        ]
+
+    def _is_sqlite_backend(self) -> bool:
+        return self.db_url.startswith("sqlite")
+
+    def _local_sqlite_file_path(self) -> Optional[Path]:
+        if "://" not in self.sqlite_path:
+            return Path(self.sqlite_path).expanduser()
+
+        if not self.db_url.startswith("sqlite:///"):
+            return None
+
+        parsed = urlparse(self.db_url)
+        if parsed.scheme != "sqlite" or not parsed.path:
+            return None
+        return Path(unquote(parsed.path))
+
+    def _init_schema(self) -> None:
+        Base.metadata.create_all(self.engine, tables=self._storage_tables())
+        if self._is_sqlite_backend():
+            with self.engine.begin() as conn:
+                conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+                conn.exec_driver_sql("PRAGMA busy_timeout=30000")
+
     def write_events(self, events: List[Dict[str, Any]]) -> None:
-        """
-        Запись событий в оба хранилища
-        
-        Args:
-            events: Список событий для записи
-        """
+        """Write events to NDJSON and relational storage."""
         if not events:
             return
-        
-        with self._lock:
-            # 1. Запись в NDJSON
-            with open(self.ndjson_path, 'a', encoding='utf-8') as f:
-                for event in events:
-                    f.write(json.dumps(event, ensure_ascii=False) + '\n')
 
-            # 2. Запись в SQLite (батчем)
+        with self._lock:
+            with open(self.ndjson_path, "a", encoding="utf-8") as handle:
+                for event in events:
+                    handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
             self._write_sqlite_events(events)
 
     def _write_sqlite_events(self, events: List[Dict[str, Any]]) -> None:
-        """Запись событий только в SQLite."""
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            rows = []
+        """Write events to the relational store."""
+        with self.SessionLocal.begin() as session:
             for event in events:
-                rows.append((
-                    event.get('_device', ''),
-                    event.get('serialNo', 0),
-                    event.get('time', ''),
-                    event.get('employeeNoString', ''),
-                    event.get('name', ''),
-                    json.dumps(event, ensure_ascii=False),
-                    event.get('_collected', '')
-                ))
-
-            conn.executemany(
-                'INSERT OR REPLACE INTO events '
-                '(device, serialNo, time, employeeNoString, name, '
-                'event_data, collected_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                rows
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    
-    def update_collector_state(
-        self, device: str, last_serial: int, last_collect: Optional[str] = None
-    ) -> None:
-        """
-        Обновить состояние коллектора для устройства
-        
-        Args:
-            device: IP или идентификатор устройства
-            last_serial: Последний успешно собранный serialNo
-            last_collect: Время последнего сбора (ISO format)
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            now = datetime.now().isoformat()
-            conn.execute(
-                'INSERT OR REPLACE INTO collector_state '
-                '(device, last_serial, last_collect, updated_at) '
-                'VALUES (?, ?, ?, ?)',
-                (device, last_serial, last_collect, now)
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    
-    def get_collector_state(self, device: str) -> Optional[Dict[str, Any]]:
-        """
-        Получить состояние коллектора для устройства
-        
-        Args:
-            device: IP или идентификатор устройства
-            
-        Returns:
-            Словарь с полями last_serial, last_collect, updated_at
-            или None если состояния нет
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            cursor = conn.execute(
-                'SELECT last_serial, last_collect, updated_at '
-                'FROM collector_state WHERE device = ?',
-                (device,)
-            )
-            row = cursor.fetchone()
-            if row:
-                return {
-                    'last_serial': row[0],
-                    'last_collect': row[1],
-                    'updated_at': row[2]
-                }
-            return None
-        finally:
-            conn.close()
-    
-    def get_last_serial(self, device: str) -> int:
-        """
-        Получить последний serialNo для устройства из SQLite
-        
-        Args:
-            device: IP или идентификатор устройства
-            
-        Returns:
-            Последний serialNo или 1 если событий нет
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            cursor = conn.execute(
-                'SELECT MAX(serialNo) FROM events WHERE device = ?',
-                (device,)
-            )
-            result = cursor.fetchone()[0]
-            return result if result is not None else 1
-        finally:
-            conn.close()
-    
-    def get_last_serials_all_devices(self) -> Dict[str, int]:
-        """
-        Получить последние serialNo для всех устройств
-        
-        Returns:
-            Словарь {device: last_serialNo}
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            cursor = conn.execute(
-                'SELECT device, MAX(serialNo) '
-                'FROM events '
-                'GROUP BY device'
-            )
-            return dict(cursor.fetchall())
-        finally:
-            conn.close()
-    
-    def get_event_count(self, device: Optional[str] = None) -> int:
-        """
-        Получить количество событий
-        
-        Args:
-            device: Устройство (если None - все устройства)
-            
-        Returns:
-            Количество событий
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            if device:
-                cursor = conn.execute(
-                    'SELECT COUNT(*) FROM events WHERE device = ?',
-                    (device,)
+                row = session.get(
+                    CollectorEvent,
+                    {
+                        "device": event.get("_device", ""),
+                        "serialNo": event.get("serialNo", 0),
+                    },
                 )
-            else:
-                cursor = conn.execute('SELECT COUNT(*) FROM events')
-            
-            return cursor.fetchone()[0]
-        finally:
-            conn.close()
+                if row is None:
+                    row = CollectorEvent(
+                        device=event.get("_device", ""),
+                        serialNo=event.get("serialNo", 0),
+                        time=event.get("time", ""),
+                        employeeNoString=event.get("employeeNoString", ""),
+                        name=event.get("name", ""),
+                        event_data=json.dumps(event, ensure_ascii=False),
+                        collected_at=event.get("_collected", ""),
+                    )
+                    session.add(row)
+                    continue
+
+                row.time = event.get("time", "")
+                row.employeeNoString = event.get("employeeNoString", "")
+                row.name = event.get("name", "")
+                row.event_data = json.dumps(event, ensure_ascii=False)
+                row.collected_at = event.get("_collected", "")
+
+    def update_collector_state(
+        self,
+        device: str,
+        last_serial: int,
+        last_collect: Optional[str] = None,
+    ) -> None:
+        """Update persisted collector cursor for a device."""
+        now = datetime.now().isoformat()
+        with self.SessionLocal.begin() as session:
+            state = session.get(CollectorState, device)
+            if state is None:
+                state = CollectorState(
+                    device=device,
+                    last_serial=last_serial,
+                    last_collect=last_collect,
+                    updated_at=now,
+                )
+                session.add(state)
+                return
+
+            state.last_serial = last_serial
+            state.last_collect = last_collect
+            state.updated_at = now
+
+    def get_collector_state(self, device: str) -> Optional[Dict[str, Any]]:
+        """Return collector cursor for a device."""
+        with Session(self.engine) as session:
+            state = session.get(CollectorState, device)
+            if state is None:
+                return None
+            return {
+                "last_serial": state.last_serial,
+                "last_collect": state.last_collect,
+                "updated_at": state.updated_at,
+            }
+
+    def get_last_serial(self, device: str) -> int:
+        """Return highest serialNo for a device or 1 when empty."""
+        with Session(self.engine) as session:
+            result = session.scalar(
+                select(func.max(CollectorEvent.serialNo)).where(
+                    CollectorEvent.device == device
+                )
+            )
+            return int(result) if result is not None else 1
+
+    def get_last_serials_all_devices(self) -> Dict[str, int]:
+        """Return highest serialNo for each device."""
+        with Session(self.engine) as session:
+            rows = session.execute(
+                select(
+                    CollectorEvent.device,
+                    func.max(CollectorEvent.serialNo),
+                ).group_by(CollectorEvent.device)
+            ).all()
+            return {device: int(serial) for device, serial in rows if serial is not None}
+
+    def get_event_count(self, device: Optional[str] = None) -> int:
+        """Return stored event count."""
+        stmt = select(func.count()).select_from(CollectorEvent)
+        if device:
+            stmt = stmt.where(CollectorEvent.device == device)
+        with Session(self.engine) as session:
+            return int(session.scalar(stmt) or 0)
 
     def iter_events_without_images(
         self,
@@ -263,70 +204,53 @@ class EventStorage:
         limit: Optional[int] = None,
         newest_first: bool = False,
     ):
-        """
-        Итерация по событиям без сохранённого пути к изображению.
+        """Iterate raw events missing `_imagePath`."""
+        stmt = select(CollectorEvent.event_data).where(
+            CollectorEvent.event_data.not_like('%"_imagePath"%')
+        )
+        if device:
+            stmt = stmt.where(CollectorEvent.device == device)
 
-        Args:
-            device: Устройство (если None - все устройства)
-            limit: Максимальное количество событий
-            newest_first: Сначала новые события, затем старые
-
-        Yields:
-            Сырые события из event_data
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            query = (
-                "SELECT event_data FROM events "
-                "WHERE event_data NOT LIKE ?"
+        if newest_first:
+            stmt = stmt.order_by(
+                CollectorEvent.time.desc(),
+                CollectorEvent.serialNo.desc(),
+                CollectorEvent.device,
             )
-            params = ['%"_imagePath"%']
-            if device:
-                query += " AND device = ?"
-                params.append(device)
-            if newest_first:
-                query += " ORDER BY time DESC, serialNo DESC, device"
-            else:
-                query += " ORDER BY device, time, serialNo"
-            if limit is not None:
-                query += " LIMIT ?"
-                params.append(int(limit))
+        else:
+            stmt = stmt.order_by(
+                CollectorEvent.device,
+                CollectorEvent.time,
+                CollectorEvent.serialNo,
+            )
 
-            cursor = conn.execute(query, params)
-            for (event_data,) in cursor:
+        if limit is not None:
+            stmt = stmt.limit(int(limit))
+
+        with Session(self.engine) as session:
+            for event_data in session.scalars(stmt):
                 try:
                     yield json.loads(event_data)
                 except json.JSONDecodeError:
                     continue
-        finally:
-            conn.close()
 
     def update_event(self, event: Dict[str, Any]) -> None:
-        """
-        Обновить существующее событие в SQLite.
-
-        NDJSON не переписывается: это append-only журнал сырых событий.
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            conn.execute(
-                'UPDATE events '
-                'SET time = ?, employeeNoString = ?, name = ?, '
-                'event_data = ?, collected_at = ? '
-                'WHERE device = ? AND serialNo = ?',
-                (
-                    event.get('time', ''),
-                    event.get('employeeNoString', ''),
-                    event.get('name', ''),
-                    json.dumps(event, ensure_ascii=False),
-                    event.get('_collected', ''),
-                    event.get('_device', ''),
-                    event.get('serialNo', 0),
-                )
+        """Update an existing event row in structured storage only."""
+        device = event.get("_device", "")
+        serial_no = event.get("serialNo", 0)
+        with self.SessionLocal.begin() as session:
+            row = session.get(
+                CollectorEvent,
+                {"device": device, "serialNo": serial_no},
             )
-            conn.commit()
-        finally:
-            conn.close()
+            if row is None:
+                return
+
+            row.time = event.get("time", "")
+            row.employeeNoString = event.get("employeeNoString", "")
+            row.name = event.get("name", "")
+            row.event_data = json.dumps(event, ensure_ascii=False)
+            row.collected_at = event.get("_collected", "")
 
     def update_event_image(
         self,
@@ -334,82 +258,61 @@ class EventStorage:
         serial_no: int,
         image_path: str,
     ) -> bool:
-        """
-        Обновить только путь к изображению в event_data существующего события.
-
-        Возвращает True, если событие найдено и обновлено.
-        """
-        conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
-        try:
-            cursor = conn.execute(
-                'SELECT event_data FROM events WHERE device = ? AND serialNo = ?',
-                (device, serial_no),
+        """Update only `_imagePath` inside stored event JSON."""
+        with self.SessionLocal.begin() as session:
+            row = session.get(
+                CollectorEvent,
+                {"device": device, "serialNo": serial_no},
             )
-            row = cursor.fetchone()
             if row is None:
                 return False
 
             try:
-                event = json.loads(row[0])
+                event = json.loads(row.event_data)
             except json.JSONDecodeError:
                 return False
 
-            event['_imagePath'] = image_path
-
-            conn.execute(
-                'UPDATE events SET event_data = ? WHERE device = ? AND serialNo = ?',
-                (
-                    json.dumps(event, ensure_ascii=False),
-                    device,
-                    serial_no,
-                )
-            )
-            conn.commit()
+            event["_imagePath"] = image_path
+            row.event_data = json.dumps(event, ensure_ascii=False)
             return True
-        finally:
-            conn.close()
 
     def rebuild_sqlite_from_ndjson(self, progress_callback=None) -> int:
-        """
-        Восстановить SQLite БД из NDJSON файла
-        
-        Args:
-            progress_callback: Функция для отчёта о прогрессе
-            
-        Returns:
-            Количество импортированных событий
-        """
+        """Rebuild structured storage from the append-only NDJSON journal."""
         if not os.path.exists(self.ndjson_path):
             return 0
-        
-        # Пересоздаём БД
-        if os.path.exists(self.sqlite_path):
-            os.remove(self.sqlite_path)
-        self._init_sqlite()
-        
+
+        sqlite_file_path = self._local_sqlite_file_path()
+        if sqlite_file_path is not None:
+            self.engine.dispose()
+            if sqlite_file_path.exists():
+                sqlite_file_path.unlink()
+            self._create_engine()
+            self._init_schema()
+        else:
+            Base.metadata.drop_all(self.engine, tables=self._storage_tables())
+            self._init_schema()
+
         count = 0
-        batch = []
+        batch: list[dict[str, Any]] = []
         batch_size = 1000
-        
-        with open(self.ndjson_path, 'r', encoding='utf-8') as f:
-            for line in f:
+
+        with open(self.ndjson_path, "r", encoding="utf-8") as handle:
+            for line in handle:
                 try:
                     event = json.loads(line.strip())
-                    batch.append(event)
-                    count += 1
-                    
-                    if len(batch) >= batch_size:
-                        self._write_sqlite_events(batch)
-                        batch = []
-                        
-                        if progress_callback:
-                            progress_callback(count)
-                
                 except json.JSONDecodeError:
                     continue
-        
-        # Запись остатка
+
+                batch.append(event)
+                count += 1
+
+                if len(batch) >= batch_size:
+                    self._write_sqlite_events(batch)
+                    batch = []
+                    if progress_callback:
+                        progress_callback(count)
+
         if batch:
             self._write_sqlite_events(batch)
-        
+
         return count

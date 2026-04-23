@@ -121,6 +121,31 @@ def run_check(_: argparse.Namespace) -> None:
     check_main()
 
 
+def run_collector_migrate(args: argparse.Namespace) -> None:
+    from collector.migrate import migrate_collector_storage
+    from core import build_settings
+
+    settings = build_settings()
+    target_db = args.target_db or settings.collector.sqlite_path
+
+    def progress(label: str, copied: int) -> None:
+        print(f"[collector-migrate] {label}: {copied}")
+
+    counts = migrate_collector_storage(
+        args.source_db,
+        target_db,
+        batch_size=args.batch_size,
+        overwrite=args.overwrite,
+        progress_callback=progress if args.verbose else None,
+    )
+    print(
+        "[collector-migrate] done: "
+        f"events={counts['events']}, "
+        f"states={counts['states']}, "
+        f"overrides={counts['overrides']}"
+    )
+
+
 def run_mapping(args: argparse.Namespace) -> None:
     from tools.manage_mapping import main as mapping_main
 
@@ -148,7 +173,7 @@ def build_parser() -> argparse.ArgumentParser:
     api = subparsers.add_parser("api", help="Run LogStorm FastAPI server")
     api.add_argument("--host", default="127.0.0.1")
     api.add_argument("--port", type=int, default=8000)
-    api.add_argument("--db-path", help="Collector SQLite DB path")
+    api.add_argument("--db-path", help="Collector DB path or SQLAlchemy URL")
     api.add_argument("--api-token", help="Bearer token for API requests")
     api.add_argument("--reload", action="store_true")
     api.set_defaults(func=run_api)
@@ -164,6 +189,20 @@ def build_parser() -> argparse.ArgumentParser:
     collector.add_argument("--backfill-limit", type=int)
     collector.add_argument("--verbose", "-v", action="store_true")
     collector.set_defaults(func=run_collector)
+
+    collector_migrate = subparsers.add_parser(
+        "collector-migrate",
+        help="Migrate collector storage into the DB configured in project settings",
+    )
+    collector_migrate.add_argument("--source-db", required=True)
+    collector_migrate.add_argument(
+        "--target-db",
+        help="Optional override for target DB URL/path. Defaults to project settings.",
+    )
+    collector_migrate.add_argument("--batch-size", type=int, default=1000)
+    collector_migrate.add_argument("--overwrite", action="store_true")
+    collector_migrate.add_argument("--verbose", "-v", action="store_true")
+    collector_migrate.set_defaults(func=run_collector_migrate)
 
     check = subparsers.add_parser("check", help="Check local environment")
     check.set_defaults(func=run_check)

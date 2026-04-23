@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytest
 import requests
+import collector.collector as collector_facade
 
 from collector.collector import (
     Collector,
@@ -12,6 +13,7 @@ from collector.collector import (
     build_backfill_request_conditions,
     fetch_events_from_device,
     build_request_conditions,
+    is_db_url,
     load_config,
     save_default_config,
 )
@@ -83,6 +85,12 @@ def test_build_backfill_request_conditions_uses_exact_serial_and_time_window():
     assert cond["endTime"] == "2026-04-21T12:33:00"
 
 
+def test_is_db_url_detects_sqlalchemy_urls():
+    assert is_db_url("postgresql+psycopg://user:pass@db/logstorm") is True
+    assert is_db_url("sqlite:///tmp/events.db") is True
+    assert is_db_url("/tmp/events.db") is False
+
+
 def test_event_tracker_uses_storage_state(tmp_path):
     storage = EventStorage(str(tmp_path / "events.ndjson"))
     tracker = EventTracker(storage, initial_days=10)
@@ -114,6 +122,13 @@ def test_setup_logging_does_not_crash(tmp_path):
 
     assert isinstance(logger, logging.Logger)
     assert logger.level == logging.DEBUG
+
+
+def test_collector_facade_exports_key_symbols():
+    assert collector_facade.Collector is Collector
+    assert callable(collector_facade.main)
+    assert callable(collector_facade.fetch_events_from_device)
+    assert callable(collector_facade.backfill_device_images)
 
 
 class _FakeResponse:
@@ -392,12 +407,24 @@ def test_collector_backfills_missing_images_in_sqlite(tmp_path, monkeypatch):
         "devices": [_device()],
     }
 
+    def _fake_backfill_device_images(
+        device,
+        device_events,
+        storage,
+        config,
+        logger,
+    ):
+        event = device_events[0]
+        storage.update_event_image(
+            event["_device"],
+            int(event["serialNo"]),
+            str(tmp_path / "images" / "100_10.jpg"),
+        )
+        return 1, 0
+
     monkeypatch.setattr(
-        "collector.collector.backfill_event_image",
-        lambda device, event, config, logger: {
-            **event,
-            "_imagePath": str(tmp_path / "images" / "100_10.jpg"),
-        },
+        "collector.collector.backfill_device_images",
+        _fake_backfill_device_images,
     )
 
     collector = Collector(config, _logger())
@@ -407,3 +434,51 @@ def test_collector_backfills_missing_images_in_sqlite(tmp_path, monkeypatch):
     assert updated == 1
     events_without_images = list(collector.storage.iter_events_without_images())
     assert events_without_images == []
+
+
+def test_collector_collect_once_uses_facade_fetch_wrapper(tmp_path, monkeypatch):
+    config = {
+        **_config(),
+        "storage": {
+            "ndjson": str(tmp_path / "events.ndjson"),
+            "sqlite": str(tmp_path / "events.db"),
+        },
+        "devices": [{**_device(), "save_images": False}],
+    }
+
+    def _fake_fetch_events(*args, **kwargs):
+        return collector_facade.FetchResult(
+            events=[
+                {
+                    "serialNo": 10,
+                    "time": "2026-04-20T09:00:00",
+                    "employeeNoString": "100",
+                }
+            ],
+            last_serial=10,
+            completed=True,
+            last_event_time="2026-04-20T09:00:00",
+        )
+
+    monkeypatch.setattr(collector_facade, "fetch_events_from_device", _fake_fetch_events)
+
+    collector = Collector(config, _logger())
+    new_count = collector.collect_once()
+
+    assert new_count == 1
+    assert collector.storage.get_event_count() == 1
+
+
+def test_collector_accepts_sqlalchemy_db_url(tmp_path):
+    config = {
+        **_config(),
+        "storage": {
+            "ndjson": str(tmp_path / "events.ndjson"),
+            "sqlite": "sqlite:///" + str(tmp_path / "events.db"),
+        },
+        "devices": [],
+    }
+
+    collector = Collector(config, _logger())
+
+    assert collector.sqlite_file == config["storage"]["sqlite"]

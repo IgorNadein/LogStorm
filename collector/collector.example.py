@@ -7,7 +7,7 @@ The collector expects a top-level ``CONFIG`` dictionary.
 CONFIG = {
     "storage": {
         "ndjson": "events.ndjson",
-        "sqlite": "events.db",
+        "sqlite": "events.db",  # also supports SQLAlchemy URLs like postgresql+psycopg://...
     },
     "log_file": "collector.log",
     "interval_minutes": 15,

@@ -4,14 +4,13 @@
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import quote
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from core.db import create_collector_engine
 from core.models import CollectorEvent, CollectorState
 
 
@@ -24,14 +23,7 @@ class CollectorEventRepository:
 
     @staticmethod
     def _create_engine(db_path_or_url: str) -> Engine:
-        if "://" in db_path_or_url:
-            url = db_path_or_url
-        else:
-            path = Path(db_path_or_url).expanduser()
-            if not path.is_absolute():
-                path = Path.cwd() / path
-            url = f"sqlite:///{quote(str(path))}"
-        return create_engine(url)
+        return create_collector_engine(db_path_or_url)
 
     def iter_events(
         self,
@@ -82,7 +74,12 @@ class CollectorEventRepository:
 
     def count_events(self) -> int:
         with Session(self.engine) as session:
-            return len(session.scalars(select(CollectorEvent)).all())
+            return int(
+                session.scalar(
+                    select(func.count()).select_from(CollectorEvent)
+                )
+                or 0
+            )
 
     def get_states(self) -> list[CollectorState]:
         with Session(self.engine) as session:

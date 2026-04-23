@@ -40,6 +40,22 @@ def test_core_reads_api_settings_from_env():
     assert settings.collector.sqlite_path == "/tmp/events.db"
 
 
+def test_core_prefers_collector_db_url_over_legacy_path():
+    settings = build_settings(env={
+        "LOGSTORM_COLLECTOR_DB_PATH": "/tmp/events.db",
+        "LOGSTORM_COLLECTOR_DB_URL": "postgresql+psycopg://user:pass@localhost/logstorm",
+    })
+
+    assert (
+        settings.api.collector_db_path
+        == "postgresql+psycopg://user:pass@localhost/logstorm"
+    )
+    assert (
+        settings.collector.sqlite_path
+        == "postgresql+psycopg://user:pass@localhost/logstorm"
+    )
+
+
 def test_core_builds_collector_settings_from_env():
     settings = build_settings(env={
         "LOGSTORM_COLLECTOR_DB_PATH": "/tmp/events.db",

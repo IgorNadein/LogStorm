@@ -339,51 +339,52 @@ def build_request_conditions(
     }
 
 
-def build_backfill_request_conditions(
-    event: Dict[str, Any],
-    config: Dict[str, Any],
-    window_minutes: int = 15,
-) -> Dict[str, Any]:
-    """Построение совместимого с обычным сбором запроса для backfill фото."""
-    serial = event.get("serialNo")
-    event_time = event.get("time")
-    if serial is None or not event_time:
-        raise ValueError("Событие должно содержать serialNo и time")
-
-    dt = datetime.fromisoformat(str(event_time).replace("Z", "+00:00"))
-    start_time = (dt - timedelta(minutes=window_minutes)).strftime(
-        "%Y-%m-%dT%H:%M:%S"
-    )
-    end_time = (dt + timedelta(minutes=window_minutes)).strftime(
-        "%Y-%m-%dT%H:%M:%S"
-    )
-    cond = build_request_conditions(
-        start_time,
-        end_time,
-        int(serial),
-        config,
-        save_images=True,
-    )
-    cond["searchID"] = "collector"
-    return cond
-
-
-def event_identity_matches(
-    expected_event: Dict[str, Any],
-    candidate_event: Dict[str, Any],
-) -> bool:
-    """Сопоставить событие backfill по event id, если он есть, иначе по serial."""
+def get_event_identity(event: Dict[str, Any]) -> tuple[Optional[str], Optional[int]]:
+    """Извлечь идентификаторы события для сопоставления."""
+    event_id = None
     for key in ("eventID", "eventId", "event_id"):
-        expected_id = expected_event.get(key)
-        candidate_id = candidate_event.get(key)
-        if expected_id is not None and candidate_id is not None:
-            return str(expected_id) == str(candidate_id)
+        value = event.get(key)
+        if value not in (None, ""):
+            event_id = str(value)
+            break
 
-    expected_serial = expected_event.get("serialNo")
-    candidate_serial = candidate_event.get("serialNo")
-    if expected_serial is None or candidate_serial is None:
-        return False
-    return int(expected_serial) == int(candidate_serial)
+    serial = event.get("serialNo")
+    serial_no = int(serial) if serial is not None else None
+    return event_id, serial_no
+
+
+def remove_pending_event(
+    pending_by_serial: Dict[int, Dict[str, Any]],
+    pending_by_event_id: Dict[str, Dict[str, Any]],
+    event: Dict[str, Any],
+) -> None:
+    """Удалить событие из набора ожидающих backfill."""
+    event_id, serial_no = get_event_identity(event)
+    if event_id is not None:
+        pending_by_event_id.pop(event_id, None)
+    if serial_no is not None:
+        pending_by_serial.pop(serial_no, None)
+
+
+def pop_matching_pending_event(
+    candidate_event: Dict[str, Any],
+    pending_by_serial: Dict[int, Dict[str, Any]],
+    pending_by_event_id: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Найти и удалить совпавшее ожидающее событие."""
+    event_id, serial_no = get_event_identity(candidate_event)
+
+    if event_id is not None and event_id in pending_by_event_id:
+        event = pending_by_event_id[event_id]
+        remove_pending_event(pending_by_serial, pending_by_event_id, event)
+        return event
+
+    if serial_no is not None and serial_no in pending_by_serial:
+        event = pending_by_serial[serial_no]
+        remove_pending_event(pending_by_serial, pending_by_event_id, event)
+        return event
+
+    return None
 
 
 def parse_multipart_response(
@@ -655,93 +656,199 @@ def fetch_events_from_device(
     )
 
 
-def backfill_event_image(
+def backfill_device_images(
     device: Dict[str, Any],
-    event: Dict[str, Any],
+    pending_events: List[Dict[str, Any]],
+    storage: EventStorage,
     config: Dict[str, Any],
     logger: logging.Logger,
-) -> Optional[str]:
-    """Попытаться догрузить фото для уже сохранённого события."""
+) -> tuple[int, int]:
+    """Догрузить фото для набора событий устройства страничным запросом."""
     host = device["host"]
     device_name = device.get("name", host)
     user = device["user"]
     password = device["password"]
     req = config.get("request", {})
     images_cfg = config.get("images", {})
+    if not pending_events:
+        return 0, 0
 
-    serial = event.get("serialNo")
-    if serial is None or event.get("_imagePath"):
-        return None
+    pending_sorted = sorted(
+        (
+            event for event in pending_events
+            if event.get("serialNo") is not None and not event.get("_imagePath")
+        ),
+        key=lambda event: (
+            int(event.get("serialNo", 0)),
+            str(event.get("time", "")),
+        ),
+    )
+    if not pending_sorted:
+        return 0, 0
+
+    pending_by_serial: Dict[int, Dict[str, Any]] = {}
+    pending_by_event_id: Dict[str, Dict[str, Any]] = {}
+    for event in pending_sorted:
+        event_id, serial_no = get_event_identity(event)
+        if serial_no is None:
+            continue
+        pending_by_serial[serial_no] = event
+        if event_id is not None:
+            pending_by_event_id[event_id] = event
+
+    if not pending_by_serial:
+        return 0, 0
+
+    serials = sorted(pending_by_serial.keys())
+    start_serial = serials[0]
+    max_pending_serial = serials[-1]
+
+    event_times = [
+        datetime.fromisoformat(str(event["time"]).replace("Z", "+00:00"))
+        for event in pending_sorted
+        if event.get("time")
+    ]
+    if event_times:
+        start_time = (min(event_times) - timedelta(hours=1)).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        end_time = max(event_times).strftime("%Y-%m-%dT%H:%M:%S")
+    else:
+        now = datetime.now()
+        start_time = (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
+        end_time = now.strftime("%Y-%m-%dT%H:%M:%S")
 
     base_url = f"http://{host}"
     auth = HTTPDigestAuth(user, password)
     session = requests.Session()
     session.headers.update({"Accept": "application/json"})
 
+    next_serial = start_serial
+    updated_count = 0
+    skipped_count = 0
+
     try:
-        cond = build_backfill_request_conditions(event, config)
         url = f"{base_url}/ISAPI/AccessControl/AcsEvent?format=json"
-        resp = session.post(
-            url,
-            auth=auth,
-            json={"AcsEventCond": cond},
-            timeout=(5, req.get("timeout", 180)),
-        )
+        iteration = 0
 
-        if resp.status_code >= 400:
-            logger.warning(
-                f"    [{device_name}][WARN] Backfill HTTP {resp.status_code} "
-                f"for serial {serial}"
+        while pending_by_serial:
+            iteration += 1
+            cond = build_request_conditions(
+                start_time,
+                end_time,
+                next_serial,
+                config,
+                save_images=True,
             )
-            return None
-
-        ct = (resp.headers.get("Content-Type") or "").lower()
-        if "multipart" in ct:
-            payload, images_data = parse_multipart_response(
-                resp,
-                True,
-                logger,
-                device_name,
+            resp = session.post(
+                url,
+                auth=auth,
+                json={"AcsEventCond": cond},
+                timeout=(5, req.get("timeout", 180)),
             )
-            if payload is None:
-                return None
-        else:
-            payload = resp.json()
-            images_data = {}
 
-        if "statusCode" in payload:
-            logger.warning(
-                f"    [{device_name}][WARN] Backfill rejected by device for "
-                f"serial {serial}: {payload.get('statusString', 'unknown')}"
+            logger.debug(
+                f"    [{device_name}][backfill {iteration}] serial "
+                f"from {next_serial}, pending {len(pending_by_serial)}"
             )
-            return None
 
-        fetched_events = payload.get("AcsEvent", {}).get("InfoList", [])
-        matched_event = None
-        for candidate in fetched_events:
-            if event_identity_matches(event, candidate):
-                matched_event = candidate
+            if resp.status_code >= 400:
+                logger.warning(
+                    f"    [{device_name}][WARN] Backfill HTTP "
+                    f"{resp.status_code} from serial {next_serial}"
+                )
                 break
-        if matched_event is None:
-            return None
 
-        process_event_images(
-            [matched_event],
-            images_data,
-            images_cfg,
-            auth,
-            session,
-            logger,
-        )
-        return matched_event.get("_imagePath")
+            ct = (resp.headers.get("Content-Type") or "").lower()
+            if "multipart" in ct:
+                payload, images_data = parse_multipart_response(
+                    resp,
+                    True,
+                    logger,
+                    device_name,
+                )
+                if payload is None:
+                    break
+            else:
+                payload = resp.json()
+                images_data = {}
+
+            if "statusCode" in payload:
+                logger.warning(
+                    f"    [{device_name}][WARN] Backfill rejected by device: "
+                    f"{payload.get('statusString', 'unknown')}"
+                )
+                break
+
+            fetched_events = payload.get("AcsEvent", {}).get("InfoList", [])
+            if not fetched_events:
+                break
+
+            matched_pairs: List[tuple[Dict[str, Any], Dict[str, Any]]] = []
+            for candidate in fetched_events:
+                pending_event = pop_matching_pending_event(
+                    candidate,
+                    pending_by_serial,
+                    pending_by_event_id,
+                )
+                if pending_event is not None:
+                    matched_pairs.append((pending_event, candidate))
+
+            if matched_pairs:
+                matched_candidates = [candidate for _, candidate in matched_pairs]
+                process_event_images(
+                    matched_candidates,
+                    images_data,
+                    images_cfg,
+                    auth,
+                    session,
+                    logger,
+                )
+
+                for pending_event, candidate in matched_pairs:
+                    image_path = candidate.get("_imagePath")
+                    if not image_path:
+                        skipped_count += 1
+                        continue
+
+                    serial = pending_event.get("serialNo")
+                    if serial is None:
+                        skipped_count += 1
+                        continue
+
+                    updated = storage.update_event_image(
+                        host,
+                        int(serial),
+                        image_path,
+                    )
+                    if updated:
+                        updated_count += 1
+                        logger.info(
+                            f"    [OK] {device_name}: serial {serial} -> "
+                            "фото сохранено"
+                        )
+                    else:
+                        skipped_count += 1
+
+            max_sn = max(
+                (int(event.get("serialNo", 0)) for event in fetched_events),
+                default=0,
+            )
+            if max_sn <= 0:
+                break
+
+            next_serial = max_sn + 1
+            if next_serial > max_pending_serial:
+                break
     except Exception as e:
         logger.warning(
-            f"    [{device_name}][WARN] Не удалось догрузить фото для serial "
-            f"{serial}: {type(e).__name__}: {e}"
+            f"    [{device_name}][WARN] Не удалось выполнить backfill: "
+            f"{type(e).__name__}: {e}"
         )
-        return None
     finally:
         session.close()
+
+    return updated_count, skipped_count + len(pending_by_serial)
 
 
 # ============================================================================
@@ -982,40 +1089,34 @@ class Collector:
         self.logger.info(
             f"🖼️ Backfill фотографий: проверяю {len(missing_events)} событий"
         )
-        updated_count = 0
+        missing_by_device: Dict[str, List[Dict[str, Any]]] = {}
         skipped_count = 0
-
         for event in missing_events:
             host = event.get("_device")
             serial = event.get("serialNo")
-            if not host or host not in device_map:
+            if not host or host not in device_map or serial is None:
                 skipped_count += 1
                 continue
+            missing_by_device.setdefault(host, []).append(event)
 
-            image_path = backfill_event_image(
-                device_map[host],
-                event,
+        updated_count = 0
+        for host, device_events in missing_by_device.items():
+            device = device_map[host]
+            device_name = device.get("name", host)
+            self.logger.info(
+                f"  📹 {device_name} ({host}) -> backfill {len(device_events)} "
+                "событий без фото"
+            )
+
+            updated, remaining = backfill_device_images(
+                device,
+                device_events,
+                self.storage,
                 self.config,
                 self.logger,
             )
-            if not image_path:
-                skipped_count += 1
-                continue
-
-            updated = self.storage.update_event_image(
-                host,
-                int(serial),
-                image_path,
-            )
-            if not updated:
-                skipped_count += 1
-                continue
-
-            updated_count += 1
-            self.logger.info(
-                f"    [OK] {device_map[host].get('name', host)}: "
-                f"serial {serial} -> фото сохранено"
-            )
+            updated_count += updated
+            skipped_count += remaining
 
         self.logger.info(
             f"📊 Backfill завершён: {updated_count} обновлено, "

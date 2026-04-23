@@ -27,6 +27,7 @@ python collector.py
 python collector.py --backfill-images --verbose
 
 # Ограничить количество проверяемых событий
+# Для backfill берутся самые новые события без фото
 python collector.py --backfill-images --backfill-limit 500 --verbose
 ```
 

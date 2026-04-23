@@ -1081,7 +1081,12 @@ class Collector:
             self.logger.warning("Нет активных устройств для backfill фотографий")
             return 0
 
-        missing_events = list(self.storage.iter_events_without_images(limit=limit))
+        missing_events = list(
+            self.storage.iter_events_without_images(
+                limit=limit,
+                newest_first=True,
+            )
+        )
         if not missing_events:
             self.logger.info("Событий без фотографий не найдено")
             return 0

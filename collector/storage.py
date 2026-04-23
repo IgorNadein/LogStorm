@@ -261,6 +261,7 @@ class EventStorage:
         self,
         device: Optional[str] = None,
         limit: Optional[int] = None,
+        newest_first: bool = False,
     ):
         """
         Итерация по событиям без сохранённого пути к изображению.
@@ -268,6 +269,7 @@ class EventStorage:
         Args:
             device: Устройство (если None - все устройства)
             limit: Максимальное количество событий
+            newest_first: Сначала новые события, затем старые
 
         Yields:
             Сырые события из event_data
@@ -282,7 +284,10 @@ class EventStorage:
             if device:
                 query += " AND device = ?"
                 params.append(device)
-            query += " ORDER BY device, time, serialNo"
+            if newest_first:
+                query += " ORDER BY time DESC, serialNo DESC, device"
+            else:
+                query += " ORDER BY device, time, serialNo"
             if limit is not None:
                 query += " LIMIT ?"
                 params.append(int(limit))

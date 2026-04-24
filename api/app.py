@@ -75,7 +75,6 @@ def create_app(
         raw_events = repository.load_raw_events(
             start=request.period_start.isoformat(),
             end=f"{request.period_end.isoformat()}T23:59:59",
-            employee_id=request.employee_id,
         )
         events_df = LogsCamLoader.load_events(raw_events)
         events_df = LogsCamLoader.filter_valid_passes(events_df)

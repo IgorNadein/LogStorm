@@ -80,7 +80,7 @@ class EusrrAttendanceService:
     def analyze(
         self, request: AttendanceAnalysisRequest
     ) -> AttendanceAnalysisResponse:
-        employee_df = self._filter_employee_period(request)
+        period_df = self._filter_period(request)
         prefs = {
             request.employee_id: {
                 "display_name": request.display_name or request.employee_id,
@@ -91,7 +91,7 @@ class EusrrAttendanceService:
             }
         }
 
-        records = AttendanceService(employee_df, prefs).analyze_user_period(
+        records = AttendanceService(period_df, prefs).analyze_user_period(
             request.employee_id,
             request.period_start,
             request.period_end,
@@ -105,15 +105,12 @@ class EusrrAttendanceService:
             records=records,
         )
 
-    def _filter_employee_period(
-        self, request: AttendanceAnalysisRequest
-    ) -> pd.DataFrame:
+    def _filter_period(self, request: AttendanceAnalysisRequest) -> pd.DataFrame:
         if self.events_df.empty:
             return self.events_df.copy()
 
         mask = (
-            (self.events_df["name"].astype(str) == request.employee_id)
-            & (self.events_df["date"] >= request.period_start)
+            (self.events_df["date"] >= request.period_start)
             & (self.events_df["date"] <= request.period_end)
         )
         return self.events_df.loc[mask].copy()

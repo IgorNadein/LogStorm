@@ -129,6 +129,27 @@ def test_employee_without_events_gets_absence_only_on_workdays():
     assert records[date(2026, 4, 25)].employee_issues == []
 
 
+def test_employee_absence_is_not_critical_when_other_employee_has_events():
+    service = EusrrAttendanceService(_df([
+        ("100", "2026-04-20T09:00:00"),
+        ("100", "2026-04-20T18:00:00"),
+        ("200", "2026-04-21T09:00:00"),
+        ("200", "2026-04-21T18:00:00"),
+        ("100", "2026-04-22T09:00:00"),
+        ("100", "2026-04-22T18:00:00"),
+    ]))
+    request = _request(period_start="2026-04-20", period_end="2026-04-22")
+
+    records = {record.date: record for record in service.analyze(request).records}
+    absence = records[date(2026, 4, 21)]
+
+    assert "Отсутствие" in absence.employee_issues
+    assert not any(
+        "критического отсутствия" in issue
+        for issue in absence.technical_issues
+    )
+
+
 def test_period_start_after_period_end_is_rejected():
     with pytest.raises(ValueError):
         _request(period_start="2026-04-27", period_end="2026-04-20")

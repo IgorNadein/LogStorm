@@ -104,6 +104,37 @@ def test_attendance_analyze_reads_sqlite_and_returns_api_shape(tmp_path):
     assert record["work_hours"] == 9
 
 
+def test_attendance_analyze_uses_all_events_for_critical_absence_context(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(serial=1, timestamp="2026-04-20T09:00:00"),
+        _event(serial=2, timestamp="2026-04-20T18:00:00"),
+        _event(employee_id="200", serial=3, timestamp="2026-04-21T09:00:00"),
+        _event(employee_id="200", serial=4, timestamp="2026-04-21T18:00:00"),
+        _event(serial=5, timestamp="2026-04-22T09:00:00"),
+        _event(serial=6, timestamp="2026-04-22T18:00:00"),
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path), api_token="secret"))
+
+    response = client.post(
+        "/attendance/analyze",
+        json=_payload(period_start="2026-04-20", period_end="2026-04-22"),
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response.status_code == 200
+    absence = next(
+        record for record in response.json()["records"]
+        if record["date"] == "2026-04-21"
+    )
+    assert "Отсутствие" in absence["employee_issues"]
+    assert not any(
+        "критического отсутствия" in issue
+        for issue in absence["technical_issues"]
+    )
+
+
 def test_api_requests_reuse_repository_engine(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "events.db"
     storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))

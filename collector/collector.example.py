@@ -1,7 +1,8 @@
-"""Example LogStorm collector configuration.
+"""Example legacy override for LogStorm collector.
 
-Copy this file to ``collector.local.py`` and keep real credentials out of Git.
-The collector expects a top-level ``CONFIG`` dictionary.
+The collector can run directly from ``.env`` / ``core.settings``.
+Use this file only when you need a local override on top of those settings.
+Keep real credentials out of Git.
 """
 
 CONFIG = {

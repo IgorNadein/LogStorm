@@ -182,7 +182,11 @@ def build_parser() -> argparse.ArgumentParser:
         "collector",
         help="Run collector commands",
     )
-    collector.add_argument("--config", "-c", default="collector.local.py")
+    collector.add_argument(
+        "--config",
+        "-c",
+        help="Optional legacy collector override config",
+    )
     collector.add_argument("--once", action="store_true")
     collector.add_argument("--init", action="store_true")
     collector.add_argument("--backfill-images", action="store_true")

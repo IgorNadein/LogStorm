@@ -17,10 +17,10 @@ LogStorm Collector - Фоновый сборщик событий СКУД
   # Однократный сбор
   python collector.py --once --verbose
 
-  # Запуск в режиме демона (каждые N минут)
-  python collector.py --config collector.local.py
+  # Запуск в режиме демона (каждые N минут) от .env/core.settings
+  python collector.py
 
-  # Создать пример конфигурации
+  # Создать legacy override-конфиг
   python collector.py --init
 """
 
@@ -460,7 +460,12 @@ def main(argv: Optional[List[str]] = None):
         description="LogStorm Collector - Сборщик событий СКУД"
     )
 
-    parser.add_argument("--config", "-c", default="collector.local.py", help="Путь к конфигурации")
+    parser.add_argument(
+        "--config",
+        "-c",
+        default=None,
+        help="Необязательный legacy override-конфиг",
+    )
     parser.add_argument("--once", action="store_true", help="Однократный сбор и выход")
     parser.add_argument("--init", action="store_true", help="Создать пример конфигурации")
     parser.add_argument("--verbose", "-v", action="store_true", help="Подробный вывод")
@@ -483,7 +488,7 @@ def main(argv: Optional[List[str]] = None):
         return
 
     config_path = args.config
-    if not os.path.isabs(config_path):
+    if config_path and not os.path.isabs(config_path):
         config_path = os.path.join(get_app_dir(), config_path)
 
     config = load_config(config_path)

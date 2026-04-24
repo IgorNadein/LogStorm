@@ -27,6 +27,13 @@ def test_load_config_returns_default_when_missing(tmp_path):
     assert config["devices"][0]["host"] == "192.168.1.101"
 
 
+def test_load_config_returns_default_when_path_is_none():
+    config = load_config(None)
+
+    assert config["storage"] == DEFAULT_CONFIG["storage"]
+    assert config["devices"] == DEFAULT_CONFIG["devices"]
+
+
 def test_save_default_config_writes_python_config(tmp_path):
     config_path = tmp_path / "collector.local.py"
 
@@ -35,6 +42,17 @@ def test_save_default_config_writes_python_config(tmp_path):
     saved = load_config(str(config_path))
     assert saved["interval_minutes"] == DEFAULT_CONFIG["interval_minutes"]
     assert "devices" in saved
+
+
+def test_save_default_config_uses_legacy_filename_when_path_is_none(tmp_path, monkeypatch):
+    import collector.config as collector_config
+
+    monkeypatch.setattr(collector_config, "get_app_dir", lambda: str(tmp_path))
+
+    save_default_config(None)
+
+    saved = load_config(str(tmp_path / "collector.local.py"))
+    assert saved["storage"] == DEFAULT_CONFIG["storage"]
 
 
 def test_load_config_keeps_json_compatibility(tmp_path):
@@ -538,3 +556,29 @@ def test_collector_main_uses_defaults_when_config_file_is_missing(tmp_path, monk
     assert captured["collect_once"] is True
     assert captured["config"]["storage"]["sqlite"] == DEFAULT_CONFIG["storage"]["sqlite"]
     assert captured["config"]["devices"] == DEFAULT_CONFIG["devices"]
+
+
+def test_collector_main_runs_without_config_argument(tmp_path, monkeypatch):
+    captured = {}
+
+    class _FakeCollector:
+        def __init__(self, config, logger):
+            captured["config"] = config
+
+        def collect_once(self):
+            captured["collect_once"] = True
+
+        def stop(self):
+            return None
+
+    monkeypatch.setattr(collector_facade, "Collector", _FakeCollector)
+    monkeypatch.setattr(
+        collector_facade,
+        "setup_logging",
+        lambda *args, **kwargs: _logger(),
+    )
+
+    collector_facade.main(["--once"])
+
+    assert captured["collect_once"] is True
+    assert captured["config"]["storage"] == DEFAULT_CONFIG["storage"]

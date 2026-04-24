@@ -44,7 +44,7 @@ CREATE TABLE collector_state (
 ### Обычный запуск
 
 ```bash
-python collector.py --config collector.local.py --verbose
+python main.py collector --verbose
 ```
 
 События записываются в:
@@ -93,7 +93,11 @@ for device, serial in serials.items():
 
 ## Конфигурация
 
-В `collector.local.py` используйте секцию `storage` словаря `CONFIG` для настройки хранилища:
+Базовая конфигурация collector теперь должна приходить из `.env` / `core.settings`.
+`collector.local.py` остаётся только как необязательный legacy override поверх этих
+настроек.
+
+Если используется override-файл, секция `storage` словаря `CONFIG` выглядит так:
 
 ```json
 {

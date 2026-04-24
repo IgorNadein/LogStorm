@@ -69,6 +69,28 @@ def test_collector_command_forwards_arguments(monkeypatch):
     ]
 
 
+def test_collector_command_omits_config_when_not_provided(monkeypatch):
+    forwarded = {}
+
+    def fake_collector_main(argv):
+        forwarded["argv"] = argv
+
+    import collector.collector
+
+    monkeypatch.setattr(collector.collector, "main", fake_collector_main)
+
+    main.main([
+        "collector",
+        "--once",
+        "--verbose",
+    ])
+
+    assert forwarded["argv"] == [
+        "--once",
+        "--verbose",
+    ]
+
+
 def test_collector_migrate_command_forwards_arguments(monkeypatch):
     called = {}
 

@@ -41,8 +41,10 @@ def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
     return merged
 
 
-def load_config(config_path: str) -> dict[str, Any]:
+def load_config(config_path: str | None) -> dict[str, Any]:
     """Load collector configuration from JSON or Python config."""
+    if not config_path:
+        return copy.deepcopy(DEFAULT_CONFIG)
     if os.path.exists(config_path):
         if config_path.endswith(".py"):
             return load_python_config(config_path)
@@ -76,8 +78,10 @@ def get_app_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def save_default_config(config_path: str) -> None:
+def save_default_config(config_path: str | None) -> None:
     """Persist default config as JSON or Python module."""
+    if not config_path:
+        config_path = "collector.local.py"
     if not os.path.isabs(config_path):
         config_path = os.path.join(get_app_dir(), config_path)
 

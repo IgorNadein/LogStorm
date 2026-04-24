@@ -104,6 +104,42 @@ def test_attendance_analyze_reads_sqlite_and_returns_api_shape(tmp_path):
     assert record["work_hours"] == 9
 
 
+def test_api_requests_reuse_repository_engine(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([_event(serial=1, timestamp="2026-04-20T09:00:00")])
+
+    import core.repositories.collector_events as collector_events_repo
+
+    call_count = {"value": 0}
+    original_factory = collector_events_repo.create_collector_engine
+
+    def _counting_factory(*args, **kwargs):
+        call_count["value"] += 1
+        return original_factory(*args, **kwargs)
+
+    monkeypatch.setattr(
+        collector_events_repo,
+        "create_collector_engine",
+        _counting_factory,
+    )
+
+    client = TestClient(create_app(db_path=str(sqlite_path), api_token="secret"))
+
+    response1 = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+        headers={"Authorization": "Bearer secret"},
+    )
+    response2 = client.get(
+        "/attendance/events/day/?employee_id=100&date=2026-04-20",
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert call_count["value"] == 1
+
+
 def test_attendance_day_events_returns_employee_events_for_date(tmp_path):
     sqlite_path = tmp_path / "events.db"
     image_path = tmp_path / "images" / "event.jpg"

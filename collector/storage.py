@@ -59,7 +59,11 @@ class EventStorage:
             sqlite_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _create_engine(self) -> None:
-        self.engine = create_collector_engine(self.sqlite_path, timeout=30.0)
+        self.engine = create_collector_engine(
+            self.sqlite_path,
+            role="collector",
+            timeout=30.0,
+        )
         self.SessionLocal = sessionmaker(self.engine, expire_on_commit=False)
 
     def _storage_tables(self) -> list[Any]:

@@ -27,13 +27,27 @@ def is_db_url(value: str) -> bool:
     return "://" in value
 
 
+def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if (
+            isinstance(value, dict)
+            and isinstance(merged.get(key), dict)
+            and key in {"storage", "images", "request"}
+        ):
+            merged[key] = _merge_config(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
 def load_config(config_path: str) -> dict[str, Any]:
     """Load collector configuration from JSON or Python config."""
     if os.path.exists(config_path):
         if config_path.endswith(".py"):
             return load_python_config(config_path)
         with open(config_path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+            return _merge_config(DEFAULT_CONFIG, json.load(handle))
     return copy.deepcopy(DEFAULT_CONFIG)
 
 
@@ -52,7 +66,7 @@ def load_python_config(config_path: str) -> dict[str, Any]:
         raise ValueError(
             f"Python config должен содержать словарь CONFIG: {config_path}"
         )
-    return copy.deepcopy(config)
+    return _merge_config(DEFAULT_CONFIG, config)
 
 
 def get_app_dir() -> str:

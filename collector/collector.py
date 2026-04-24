@@ -486,11 +486,6 @@ def main(argv: Optional[List[str]] = None):
     if not os.path.isabs(config_path):
         config_path = os.path.join(get_app_dir(), config_path)
 
-    if not os.path.exists(config_path):
-        print(f"[ERROR] Файл конфигурации не найден: {config_path}")
-        print("        Создайте его командой: LogStormCollector.exe --init")
-        sys.exit(1)
-
     config = load_config(config_path)
 
     log_file = config.get("log_file", "collector.log")

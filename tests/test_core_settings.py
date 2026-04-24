@@ -1,4 +1,7 @@
+from sqlalchemy.pool import NullPool
+
 from core import LogStormCore, build_settings
+from core.db import create_collector_engine
 
 
 def test_core_uses_config_defaults_as_sources_of_truth():
@@ -136,3 +139,36 @@ def test_core_builds_collector_devices_from_json_env():
     assert settings.collector.devices[1]["host"] == "192.168.1.104"
     assert settings.collector.devices[3]["name"] == "Камера 3"
     assert settings.collector.devices[0]["save_images"] is True
+
+
+def test_create_collector_engine_reuses_engine_for_same_url_and_role():
+    url = "postgresql+psycopg://user:pass@localhost/logstorm"
+
+    engine1 = create_collector_engine(url, role="api")
+    engine2 = create_collector_engine(url, role="api")
+
+    assert engine1 is engine2
+    assert engine1.pool.size() == 2
+
+
+def test_create_collector_engine_uses_distinct_roles_and_pool_settings():
+    url = "postgresql+psycopg://user:pass@localhost/logstorm"
+
+    api_engine = create_collector_engine(url, role="api")
+    collector_engine = create_collector_engine(url, role="collector")
+    migration_engine = create_collector_engine(url, role="migration")
+
+    assert api_engine is not collector_engine
+    assert api_engine.pool.size() == 2
+    assert collector_engine.pool.size() == 1
+    assert isinstance(migration_engine.pool, NullPool)
+
+
+def test_core_reuses_repository_instances():
+    core = LogStormCore.from_sources(env={"LOGSTORM_COLLECTOR_DB_PATH": "events.db"})
+
+    assert core.collector_repository() is core.collector_repository()
+    assert (
+        core.attendance_override_repository()
+        is core.attendance_override_repository()
+    )

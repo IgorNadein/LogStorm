@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 """Repository for reading collector events through SQLAlchemy."""
 
-import os
 from collections.abc import Iterator
 from typing import Any, Optional
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -17,13 +16,18 @@ from core.models import CollectorEvent, CollectorState
 class CollectorEventRepository:
     """Read-only repository for collector SQLite or SQLAlchemy URLs."""
 
-    def __init__(self, db_path_or_url: str):
+    def __init__(
+        self,
+        db_path_or_url: str,
+        *,
+        engine: Engine | None = None,
+    ):
         self.db_path_or_url = db_path_or_url
-        self.engine = self._create_engine(db_path_or_url)
+        self.engine = engine or self._create_engine(db_path_or_url)
 
     @staticmethod
     def _create_engine(db_path_or_url: str) -> Engine:
-        return create_collector_engine(db_path_or_url)
+        return create_collector_engine(db_path_or_url, role="api")
 
     def iter_events(
         self,

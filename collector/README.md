@@ -5,17 +5,18 @@
 ## Быстрый старт
 
 ```bash
-# 1. Создать конфигурацию
-python collector.py --init
+# 1. Настроить .env (БД, камеры, пути)
 
-# 2. Отредактировать collector.local.py (указать камеры, пути)
-
-# 3. Тестовый запуск (однократный сбор)
+# 2. Тестовый запуск (однократный сбор)
 python collector.py --once --verbose
 
-# 4. Запуск в режиме демона (каждые N минут)
+# 3. Запуск в режиме демона (каждые N минут)
 python collector.py
 ```
+
+`collector.local.py` больше не обязателен. Если файла нет, collector использует
+настройки из `.env` / `core.settings`. Если файл есть, он работает как legacy
+override поверх базового env-конфига.
 
 ## Догрузка фотографий для старых событий
 
@@ -93,8 +94,9 @@ After=network.target
 [Service]
 Type=simple
 User=YOUR_USER
-WorkingDirectory=/path/to/LogStorm/collector
-ExecStart=/usr/bin/python3 /path/to/LogStorm/collector/collector.py --config /path/to/LogStorm/collector/collector.local.py
+WorkingDirectory=/path/to/LogStorm
+EnvironmentFile=/path/to/LogStorm/.env
+ExecStart=/path/to/LogStorm/.venv/bin/python /path/to/LogStorm/main.py collector --verbose
 Restart=always
 RestartSec=10
 

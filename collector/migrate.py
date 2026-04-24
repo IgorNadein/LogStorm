@@ -115,8 +115,8 @@ def migrate_collector_storage(
     progress_callback: Callable[[str, int], None] | None = None,
 ) -> dict[str, int]:
     """Copy collector relational data between storage backends."""
-    source_engine = create_collector_engine(source_db)
-    target_engine = create_collector_engine(target_db)
+    source_engine = create_collector_engine(source_db, role="migration")
+    target_engine = create_collector_engine(target_db, role="migration")
 
     _create_schema(target_engine)
 

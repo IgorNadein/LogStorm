@@ -49,6 +49,34 @@ def test_load_config_keeps_json_compatibility(tmp_path):
     assert config["request"]["page_size"] == 77
 
 
+def test_load_config_merges_partial_json_with_defaults(tmp_path):
+    config_path = tmp_path / "collector.json"
+    config_path.write_text(
+        '{"request": {"page_size": 77}, "images": {"enabled": true}}',
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["request"]["page_size"] == 77
+    assert config["request"]["timeout"] == DEFAULT_CONFIG["request"]["timeout"]
+    assert config["images"]["enabled"] is True
+    assert config["images"]["folder"] == DEFAULT_CONFIG["images"]["folder"]
+    assert config["devices"] == DEFAULT_CONFIG["devices"]
+
+
+def test_load_config_devices_override_replace_base_list(tmp_path):
+    config_path = tmp_path / "collector.local.py"
+    config_path.write_text(
+        'CONFIG = {"devices": [{"name": "Only one", "host": "10.0.0.1"}]}',
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_path))
+
+    assert config["devices"] == [{"name": "Only one", "host": "10.0.0.1"}]
+
+
 def test_build_request_conditions_extends_end_time_and_uses_request_config():
     config = {"request": {"page_size": 50, "major": 5, "minor": 75}}
 
@@ -482,3 +510,31 @@ def test_collector_accepts_sqlalchemy_db_url(tmp_path):
     collector = Collector(config, _logger())
 
     assert collector.sqlite_file == config["storage"]["sqlite"]
+
+
+def test_collector_main_uses_defaults_when_config_file_is_missing(tmp_path, monkeypatch):
+    captured = {}
+
+    class _FakeCollector:
+        def __init__(self, config, logger):
+            captured["config"] = config
+
+        def collect_once(self):
+            captured["collect_once"] = True
+
+        def stop(self):
+            return None
+
+    monkeypatch.setattr(collector_facade, "Collector", _FakeCollector)
+    monkeypatch.setattr(collector_facade, "get_app_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        collector_facade,
+        "setup_logging",
+        lambda *args, **kwargs: _logger(),
+    )
+
+    collector_facade.main(["--once"])
+
+    assert captured["collect_once"] is True
+    assert captured["config"]["storage"]["sqlite"] == DEFAULT_CONFIG["storage"]["sqlite"]
+    assert captured["config"]["devices"] == DEFAULT_CONFIG["devices"]

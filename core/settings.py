@@ -382,6 +382,10 @@ class LogStormCore:
 
     def __init__(self, settings: Optional[SimpleNamespace] = None):
         self.settings = settings or build_settings()
+        self._collector_repository: CollectorEventRepository | None = None
+        self._attendance_override_repository: (
+            AttendanceManualOverrideRepository | None
+        ) = None
 
     @classmethod
     def from_sources(
@@ -410,14 +414,22 @@ class LogStormCore:
         }
 
     def collector_repository(self) -> CollectorEventRepository:
-        return CollectorEventRepository(self.settings.api.collector_db_path)
+        if self._collector_repository is None:
+            self._collector_repository = CollectorEventRepository(
+                self.settings.api.collector_db_path
+            )
+        return self._collector_repository
 
     def attendance_override_repository(
         self,
     ) -> AttendanceManualOverrideRepository:
-        return AttendanceManualOverrideRepository(
-            self.settings.api.collector_db_path
-        )
+        if self._attendance_override_repository is None:
+            self._attendance_override_repository = (
+                AttendanceManualOverrideRepository(
+                    self.settings.api.collector_db_path
+                )
+            )
+        return self._attendance_override_repository
 
 
 def build_collector_config(

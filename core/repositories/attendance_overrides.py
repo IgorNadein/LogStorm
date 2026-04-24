@@ -13,23 +13,24 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from core.db import create_collector_engine
-from core.models import AttendanceManualOverride, Base
+from core.models import AttendanceManualOverride
 
 
 class AttendanceManualOverrideRepository:
     """Store and read manual attendance corrections through SQLAlchemy."""
 
-    def __init__(self, db_path_or_url: str):
+    def __init__(
+        self,
+        db_path_or_url: str,
+        *,
+        engine: Engine | None = None,
+    ):
         self.db_path_or_url = db_path_or_url
-        self.engine = self._create_engine(db_path_or_url)
-        Base.metadata.create_all(
-            self.engine,
-            tables=[AttendanceManualOverride.__table__],
-        )
+        self.engine = engine or self._create_engine(db_path_or_url)
 
     @staticmethod
     def _create_engine(db_path_or_url: str) -> Engine:
-        return create_collector_engine(db_path_or_url)
+        return create_collector_engine(db_path_or_url, role="api")
 
     def upsert(
         self,

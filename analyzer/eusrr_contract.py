@@ -158,6 +158,9 @@ def attendance_record_to_dict(record: AttendanceRecord) -> dict[str, Any]:
         "early_leave_minutes": record.early_leave_minutes,
         "is_underwork": record.is_underwork,
         "is_overtime": record.is_overtime,
+        "is_absent": record.appearances == 0
+        and record.is_workday
+        and not record.has_technical_issues,
         "technical_issues": list(record.technical_issues),
         "employee_issues": list(record.employee_issues),
     }

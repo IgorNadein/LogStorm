@@ -125,6 +125,7 @@ def test_employee_without_events_gets_absence_only_on_workdays():
 
     records = {record.date: record for record in response.records}
 
+    assert records[date(2026, 4, 20)].is_underwork is False
     assert "Отсутствие" in records[date(2026, 4, 20)].employee_issues
     assert records[date(2026, 4, 25)].employee_issues == []
 
@@ -167,3 +168,4 @@ def test_response_to_dict_is_api_serializable_shape():
     assert payload["period_start"] == "2026-04-20"
     assert payload["records"][0]["date"] == "2026-04-20"
     assert payload["records"][0]["employee_id"] == "100"
+    assert payload["records"][0]["is_absent"] is True

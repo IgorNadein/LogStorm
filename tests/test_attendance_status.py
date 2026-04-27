@@ -80,6 +80,7 @@ def test_overtime_on_workday_requires_threshold():
 def test_absence_on_workday_is_employee_issue():
     record = _analyze(_record(arrival=None, departure=None, work_hours=0, appearances=0))
 
+    assert record.is_underwork is False
     assert "Отсутствие" in record.employee_issues
 
 

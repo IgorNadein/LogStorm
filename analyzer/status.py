@@ -90,6 +90,8 @@ class StatusAnalyzer:
         """
         if not record.is_workday:
             return False
+        if record.appearances == 0:
+            return False
         return record.work_hours < record.expected_hours
     
     @staticmethod

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Service-level contract for EUSRR attendance analysis requests."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Optional
 
@@ -21,6 +21,7 @@ class AttendanceAnalysisRequest:
     period_end: date
     schedule: WorkSchedule
     display_name: Optional[str] = None
+    aliases: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "AttendanceAnalysisRequest":
@@ -45,6 +46,7 @@ class AttendanceAnalysisRequest:
             period_end=period_end,
             schedule=schedule,
             display_name=payload.get("display_name"),
+            aliases=_normalize_aliases(payload.get("aliases", [])),
         )
 
 
@@ -80,7 +82,10 @@ class EusrrAttendanceService:
     def analyze(
         self, request: AttendanceAnalysisRequest
     ) -> AttendanceAnalysisResponse:
-        period_df = self._filter_period(request)
+        period_df = self._normalize_request_aliases(
+            self._filter_period(request),
+            request,
+        )
         prefs = {
             request.employee_id: {
                 "display_name": request.display_name or request.employee_id,
@@ -115,6 +120,22 @@ class EusrrAttendanceService:
         )
         return self.events_df.loc[mask].copy()
 
+    @staticmethod
+    def _normalize_request_aliases(
+        period_df: pd.DataFrame,
+        request: AttendanceAnalysisRequest,
+    ) -> pd.DataFrame:
+        if period_df.empty or not request.aliases:
+            return period_df
+
+        result = period_df.copy()
+        request_ids = {request.employee_id, *request.aliases}
+        alias_mask = result["name"].astype(str).isin(request_ids)
+        result.loc[alias_mask, "name"] = request.employee_id
+        if request.display_name and "display_name" in result.columns:
+            result.loc[alias_mask, "display_name"] = request.display_name
+        return result
+
     @classmethod
     def _ensure_columns(cls, df: pd.DataFrame) -> pd.DataFrame:
         result = df.copy()
@@ -131,6 +152,22 @@ def _parse_date(value: Any) -> date:
     if isinstance(value, date):
         return value
     return datetime.strptime(str(value), "%Y-%m-%d").date()
+
+
+def _normalize_aliases(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (str, int)):
+        values = [value]
+    else:
+        values = value
+
+    result: list[str] = []
+    for alias in values:
+        alias_value = str(alias).strip()
+        if alias_value and alias_value not in result:
+            result.append(alias_value)
+    return result
 
 
 def attendance_record_to_dict(record: AttendanceRecord) -> dict[str, Any]:

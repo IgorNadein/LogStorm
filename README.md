@@ -52,7 +52,8 @@ python -m compileall -q .
 
 EUSRR считается источником графика, праздников, переносов и особых дней.
 LogStorm применяет переданный календарь к событиям коллектора; `employee_id`
-из запроса должен совпадать с `employeeNoString` в логах.
+из запроса должен совпадать с `employeeNoString` в логах или быть связан с ним
+через request-level `aliases`.
 
 ## Management CLI
 
@@ -135,6 +136,10 @@ Endpoint:
 
 - `GET /health`
 - `POST /attendance/analyze`
+
+`POST /attendance/analyze` accepts optional `aliases: string[]`. Events whose
+`employeeNoString` matches one of these aliases are merged into the canonical
+`employee_id` for the current analysis response.
 
 `LOGSTORM_API_TOKEN` is optional for local development. If set, clients must
 send `Authorization: Bearer <token>`.

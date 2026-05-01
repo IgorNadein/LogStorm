@@ -64,6 +64,46 @@ def test_request_uses_employee_id_and_returns_each_date_in_period():
     assert first.appearances == 2
 
 
+def test_request_aliases_are_merged_into_employee_id():
+    service = EusrrAttendanceService(_df([
+        ("100", "2026-04-20T09:00:00"),
+        ("200", "2026-04-20T18:00:00"),
+    ]))
+
+    response = service.analyze(_request(aliases=["200"]))
+
+    first = response.records[0]
+    assert response.employee_id == "100"
+    assert first.user_name == "100"
+    assert first.arrival_time.hour == 9
+    assert first.departure_time.hour == 18
+    assert first.appearances == 2
+
+
+def test_alias_analysis_matches_canonical_employee_analysis():
+    canonical = EusrrAttendanceService(_df([
+        ("100", "2026-04-20T10:15:00"),
+        ("100", "2026-04-20T17:00:00"),
+    ])).analyze(_request()).records[0]
+    alias = EusrrAttendanceService(_df([
+        ("200", "2026-04-20T10:15:00"),
+        ("200", "2026-04-20T17:00:00"),
+    ])).analyze(_request(aliases=["200"])).records[0]
+
+    assert alias.user_name == "100"
+    assert alias.arrival_time == canonical.arrival_time
+    assert alias.departure_time == canonical.departure_time
+    assert alias.work_hours == canonical.work_hours
+    assert alias.appearances == canonical.appearances
+    assert alias.is_late == canonical.is_late
+    assert alias.late_minutes == canonical.late_minutes
+    assert alias.is_early_leave == canonical.is_early_leave
+    assert alias.early_leave_minutes == canonical.early_leave_minutes
+    assert alias.is_underwork == canonical.is_underwork
+    assert alias.is_overtime == canonical.is_overtime
+    assert alias.employee_issues == canonical.employee_issues
+
+
 def test_schedule_from_request_overrides_local_person_mapping_assumption():
     service = EusrrAttendanceService(_df([
         ("100", "2026-04-20T10:00:00"),

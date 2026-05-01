@@ -29,6 +29,7 @@ class AttendanceAnalyzePayload(BaseModel):
     period_end: date
     schedule: Optional[SchedulePayload] = None
     display_name: Optional[str] = None
+    aliases: list[str] = Field(default_factory=list)
 
 
 class AttendanceManualOverridePayload(BaseModel):

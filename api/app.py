@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from core import LogStormCore
@@ -115,12 +115,17 @@ def create_app(
         response_model=list[AttendanceDayEvent],
         dependencies=[Depends(require_token)],
     )
-    def attendance_day_events(employee_id: str, date: date):
+    def attendance_day_events(
+        employee_id: str,
+        date: date,
+        aliases: list[str] = Query(default_factory=list),
+    ):
         repository = app.state.core.collector_repository()
         events = repository.load_raw_events(
             start=date.isoformat(),
             end=f"{date.isoformat()}T23:59:59",
             employee_id=employee_id,
+            employee_ids=aliases,
         )
         return [_event_to_day_event(event) for event in events]
 

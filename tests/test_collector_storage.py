@@ -186,6 +186,21 @@ def test_sqlalchemy_repository_filters_by_employee_period_and_device(tmp_path):
     assert events[0]["employeeNoString"] == "42"
 
 
+def test_sqlalchemy_repository_filters_by_employee_ids(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        {**_event(serial=1), "employeeNoString": "100"},
+        {**_event(serial=2), "employeeNoString": "200"},
+        {**_event(serial=3), "employeeNoString": "300"},
+    ])
+
+    repo = CollectorEventRepository(str(sqlite_path))
+    events = repo.load_raw_events(employee_id="100", employee_ids=["200", "200"])
+
+    assert [event["employeeNoString"] for event in events] == ["100", "200"]
+
+
 def test_sqlalchemy_repository_handles_empty_database(tmp_path):
     sqlite_path = tmp_path / "events.db"
     EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))

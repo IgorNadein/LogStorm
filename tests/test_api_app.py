@@ -228,6 +228,39 @@ def test_attendance_day_events_returns_employee_events_for_date(tmp_path):
     assert events[1]["photo_url"].startswith("/attendance/events/photos/")
 
 
+def test_attendance_day_events_returns_alias_events_for_date(tmp_path):
+    sqlite_path = tmp_path / "events.db"
+    image_path = tmp_path / "images" / "alias-event.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"fake-jpeg")
+    storage = EventStorage(str(tmp_path / "events.ndjson"), str(sqlite_path))
+    storage.write_events([
+        _event(serial=2, timestamp="2026-04-20T10:00:00"),
+        {
+            **_event(employee_id="200", serial=1, timestamp="2026-04-20T09:00:00"),
+            "_imagePath": str(image_path),
+        },
+        _event(employee_id="300", serial=3, timestamp="2026-04-20T11:00:00"),
+        _event(employee_id="400", serial=4, timestamp="2026-04-20T12:00:00"),
+        _event(employee_id="200", serial=5, timestamp="2026-04-21T09:00:00"),
+    ])
+    client = TestClient(create_app(db_path=str(sqlite_path), api_token="secret"))
+
+    response = client.get(
+        (
+            "/attendance/events/day/?employee_id=100&date=2026-04-20"
+            "&aliases=200&aliases=300"
+        ),
+        headers={"Authorization": "Bearer secret"},
+    )
+
+    assert response.status_code == 200
+    events = response.json()
+    assert [event["serial_no"] for event in events] == [1, 2, 3]
+    assert events[0]["has_photo"] is True
+    assert events[0]["photo_url"].startswith("/attendance/events/photos/")
+
+
 def test_attendance_event_photo_returns_saved_file(tmp_path):
     sqlite_path = tmp_path / "events.db"
     image_path = tmp_path / "images" / "event.jpg"

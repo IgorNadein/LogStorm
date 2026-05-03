@@ -36,6 +36,7 @@ class CollectorEventRepository:
         devices: Optional[list[str]] = None,
         limit: Optional[int] = None,
         employee_id: Optional[str] = None,
+        employee_ids: Optional[list[str]] = None,
     ) -> Iterator[CollectorEvent]:
         stmt = select(CollectorEvent).order_by(
             CollectorEvent.time,
@@ -46,8 +47,18 @@ class CollectorEventRepository:
             stmt = stmt.where(CollectorEvent.time >= start)
         if end:
             stmt = stmt.where(CollectorEvent.time <= end)
-        if employee_id:
-            stmt = stmt.where(CollectorEvent.employeeNoString == str(employee_id))
+        normalized_employee_ids = _normalize_employee_ids([
+            employee_id,
+            *(employee_ids or []),
+        ])
+        if len(normalized_employee_ids) == 1:
+            stmt = stmt.where(
+                CollectorEvent.employeeNoString == normalized_employee_ids[0]
+            )
+        elif normalized_employee_ids:
+            stmt = stmt.where(
+                CollectorEvent.employeeNoString.in_(normalized_employee_ids)
+            )
         if devices:
             stmt = stmt.where(CollectorEvent.device.in_(devices))
         if limit:
@@ -64,11 +75,17 @@ class CollectorEventRepository:
         devices: Optional[list[str]] = None,
         limit: Optional[int] = None,
         employee_id: Optional[str] = None,
+        employee_ids: Optional[list[str]] = None,
     ) -> list[dict[str, Any]]:
         return [
             event.to_event_dict()
             for event in self.iter_events(
-                start, end, devices, limit, employee_id
+                start=start,
+                end=end,
+                devices=devices,
+                limit=limit,
+                employee_id=employee_id,
+                employee_ids=employee_ids,
             )
         ]
 
@@ -92,3 +109,14 @@ class CollectorEventRepository:
                     select(CollectorState).order_by(CollectorState.device)
                 )
             )
+
+
+def _normalize_employee_ids(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value).strip() if value is not None else ""
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+    return result

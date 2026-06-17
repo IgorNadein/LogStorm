@@ -1,22 +1,25 @@
+**Language:** [English](README.md) | [Русский](README.ru.md) | [Deutsch](README.de.md) | [Español](README.es.md)
+
 # LogStorm
 
-LogStorm анализирует логи посещаемости сотрудников из CSV, NDJSON и collector SQLite баз событий СКУД Hikvision/HiWatch, нормализует сотрудников через маппинг, отделяет технические сбои от рабочих нарушений и формирует Excel-отчеты.
+LogStorm is a backend/data-processing system for access-control event logs. It reads CSV, NDJSON, and collector SQLite event sources from Hikvision/HiWatch-style access-control systems, normalizes employee identifiers through mapping rules, separates technical failures from employee-related attendance cases, and generates Excel reports.
 
-Текущий приоритет проекта: стабильный core, collector, API и pytest-покрытие.
-GUI удален из активного проекта; основной путь работы идет через `main.py`.
+The current project focus is a stable core, collector, HTTP API, and pytest coverage. The GUI was removed from the active scope; the main workflow now goes through `main.py`.
 
-## Текущее состояние
+The public repository contains synthetic demo data only. Real access logs, credentials, generated reports, and private mappings must stay outside Git.
+
+## Current State
 
 - Core CLI: `main.py`
-- Данные для локального smoke/integration прогона: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
-- Пример маппинга сотрудников для NDJSON: `data/person.sample.json`
-- Runtime core: `core/settings.py` объединяет настройки API, CLI, collector и analyzer.
-- Analyzer app: `analyzer/` содержит загрузку данных, маппинг, анализ, валидаторы и отчеты.
+- Local smoke/integration sample data: `data/attendance.csv`, `data/vhod.ndjson`, `data/vihod.ndjson`
+- NDJSON employee mapping example: `data/person.sample.json`
+- Runtime core: `core/settings.py` combines API, CLI, collector, and analyzer settings.
+- Analyzer app: `analyzer/` contains data loading, mapping, analysis, validators, and reports.
 - Collector: `collector/collector.py`, `collector/storage.py`
 - Shared models/repositories: `core/models/`, `core/repositories/`
-- Экспорт из устройства: `tools/export/export_acs_events.py`
+- Device export tool: `tools/export/export_acs_events.py`
 
-## Установка
+## Installation
 
 ```bash
 python -m venv .venv
@@ -24,15 +27,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Проверить локальное окружение можно командой:
+Check the local environment:
 
 ```bash
 python tools/check_environment.py
 ```
 
-## Проверка
+## Verification
 
-Главный источник правды по текущему поведению проекта - `pytest`.
+The main source of truth for current behavior is `pytest`.
 
 ```bash
 python -m pytest
@@ -41,19 +44,16 @@ python -m pytest -q -m realdb --real-db /home/lizerk/Dev/LogStorm/events.db
 python -m compileall -q .
 ```
 
-Покрываемые слои:
+Covered layers:
 
-- unit: конфигурация, модели, валидаторы, анализаторы, утилиты;
+- unit: configuration, models, validators, analyzers, utilities;
 - public API/core: `DataLoader`, `PersonMapper`, `AttendanceService`, `ExcelReporter`;
-- EUSRR service contract: сотрудник, период, внешний график, календарные исключения;
-- collector: конфиг, HTTP-клиент, state tracking, NDJSON+SQLite storage;
-- SQLAlchemy: чтение collector DB, фильтры по сотруднику, периоду и устройству;
-- integration: CSV/NDJSON/SQLite -> анализ -> DTO/Excel во временный файл.
+- EUSRR service contract: employee, period, external schedule, calendar exceptions;
+- collector: configuration, HTTP client, state tracking, NDJSON and SQLite storage;
+- SQLAlchemy: collector DB reads, employee filters, period filters, device filters;
+- integration: CSV/NDJSON/SQLite -> analysis -> DTO/Excel output.
 
-EUSRR считается источником графика, праздников, переносов и особых дней.
-LogStorm применяет переданный календарь к событиям коллектора; `employee_id`
-из запроса должен совпадать с `employeeNoString` в логах или быть связан с ним
-через request-level `aliases`.
+EUSRR is treated as the source of schedules, holidays, transferred working days, and special days. LogStorm applies the supplied calendar to collector events. Request `employee_id` must match `employeeNoString` in the logs or be connected through request-level `aliases`.
 
 ## Management CLI
 
@@ -65,27 +65,24 @@ python main.py collector --once
 python main.py check
 ```
 
-`python main.py` без подкоманды сохраняет прежнее поведение и запускает
-`analyze`. По умолчанию анализ читает:
+Running `python main.py` without a subcommand keeps the historical behavior and starts `analyze`. By default, analysis reads:
 
-- логи: `data/attendance.csv`;
-- маппинг: не задан, чтобы CSV sample анализировался без фильтрации;
-- отчет: `reports/attendance_report.xlsx`.
+- logs: `data/attendance.csv`;
+- mapping: not set, so the CSV sample is analyzed without filtering;
+- report: `reports/attendance_report.xlsx`.
 
-Эти значения задаются в `core/settings.py` и читаются через `LogStormCore`.
+These values are defined in `core/settings.py` and read through `LogStormCore`.
 
 ## Runtime Core
 
-Активные entrypoint должны получать настройки через `core.LogStormCore`.
-Это текущая точка объединения источников истины:
+Active entrypoints should receive settings through `core.LogStormCore`. This is the current point where runtime sources of truth are combined:
 
-- `core/settings.py` устроен как простой Django-style settings module;
-- настройки анализа, путей, форматирования и локализации лежат в одном
-  `core/settings.py`;
-- переменные `LOGSTORM_*` переопределяют runtime-настройки API;
-- `LogStormCore` передает согласованный runtime context в API/CLI.
+- `core/settings.py` works as a simple Django-style settings module;
+- analysis, path, formatting, and localization settings live in one `core/settings.py`;
+- `LOGSTORM_*` environment variables override API runtime settings;
+- `LogStormCore` passes a consistent runtime context to the API and CLI.
 
-Пример:
+Example:
 
 ```python
 from core import LogStormCore, build_settings
@@ -96,19 +93,19 @@ db_path = core.settings.api.collector_db_path
 default_schedule = core.default_schedule_payload()
 ```
 
-## Форматы данных
+## Data Formats
 
 CSV:
 
 ```csv
 timestamp,camera,name,distance,identity
-2025-10-01T15:59:57,main_entrance,igor_nadein,0.34107,"data\people\igor_nadein\photo.jpg"
+2026-04-20T08:54:00,main_entrance,employee_alpha,0.34107,"data/people/employee_alpha/photo.jpg"
 ```
 
 NDJSON:
 
 ```json
-{"major": 5, "minor": 75, "time": "2025-12-01T06:05:04+03:00", "name": "Employee Delta", "employeeNoString": "55", "serialNo": 97659}
+{"major": 5, "minor": 75, "time": "2026-04-20T08:54:00+03:00", "name": "Employee Alpha", "employeeNoString": "19", "serialNo": "SAMPLE-ENTRY-001"}
 ```
 
 SQLite collector DB:
@@ -130,22 +127,18 @@ LOGSTORM_API_TOKEN=change-me \
 uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
 
-`api.app` читает эти значения через `LogStormCore`.
+`api.app` reads these values through `LogStormCore`.
 
-Endpoint:
+Endpoints:
 
 - `GET /health`
 - `POST /attendance/analyze`
 
-`POST /attendance/analyze` accepts optional `aliases: string[]`. Events whose
-`employeeNoString` matches one of these aliases are merged into the canonical
-`employee_id` for the current analysis response.
+`POST /attendance/analyze` accepts optional `aliases: string[]`. Events whose `employeeNoString` matches one of these aliases are merged into the canonical `employee_id` for the current analysis response.
 
-`LOGSTORM_API_TOKEN` is optional for local development. If set, clients must
-send `Authorization: Bearer <token>`.
+`LOGSTORM_API_TOKEN` is optional for local development. If set, clients must send `Authorization: Bearer <token>`.
 
-If EUSRR does not send `schedule`, LogStorm uses the default schedule from
-`core/settings.py`. The fallback can be controlled with:
+If EUSRR does not send `schedule`, LogStorm uses the default schedule from `core/settings.py`. The fallback can be controlled with:
 
 - `LOGSTORM_ALLOW_DEFAULT_SCHEDULE=false` - reject requests without `schedule`;
 - `LOGSTORM_DEFAULT_START_TIME=08:00`;
@@ -153,18 +146,18 @@ If EUSRR does not send `schedule`, LogStorm uses the default schedule from
 - `LOGSTORM_DEFAULT_EXPECTED_HOURS=9`;
 - `LOGSTORM_DEFAULT_WORKDAYS=Monday,Tuesday,Wednesday,Thursday,Friday`.
 
-`file_type="auto"` также распознает расширения `.db`, `.sqlite`, `.sqlite3`.
+`file_type="auto"` also recognizes `.db`, `.sqlite`, and `.sqlite3` files.
 
-Поддерживаемые события СКУД:
+Supported access-control events:
 
-- `minor=75` - успешный вход;
-- `minor=104` - успешный выход;
-- `minor=21/22` - дверь открыта/закрыта;
-- `minor=76` - неопознанное лицо.
+- `minor=75` - successful entry;
+- `minor=104` - successful exit;
+- `minor=21/22` - door opened/closed;
+- `minor=76` - unknown face.
 
-## Маппинг сотрудников
+## Employee Mapping
 
-Sample mapping `data/person.sample.json` использует формат:
+Sample mapping `data/person.sample.json` uses this format:
 
 ```json
 {
@@ -182,49 +175,44 @@ Sample mapping `data/person.sample.json` использует формат:
 }
 ```
 
-`PersonMapper` умеет:
+`PersonMapper` can:
 
-- менять отображаемые имена;
-- применять индивидуальные графики;
-- объединять несколько ID одного сотрудника через `aliases`;
-- работать как источник профилей для `AttendanceService`.
+- change display names;
+- apply individual schedules;
+- merge multiple IDs of the same employee through `aliases`;
+- work as a profile source for `AttendanceService`.
 
 ## Collector
 
-Collector собирает события СКУД и пишет их одновременно в NDJSON и SQLite:
+The collector gathers access-control events and writes them to NDJSON and SQLite:
 
 ```bash
 python main.py collector --once
 python main.py collector --config collector/collector.local.py --once  # legacy override
 ```
 
-В тестах сетевой доступ не требуется: collector проверяется через конфигурацию, состояние, дедупликацию и локальное хранилище.
+Network access is not required in tests: collector behavior is verified through configuration, state tracking, deduplication, and local storage.
 
-По умолчанию collector берёт конфиг из `.env` / `core.settings`.
-`collector.local.py` остаётся только как необязательный legacy override с
-верхнеуровневым словарем `CONFIG`. JSON-конфиги читаются только для обратной
-совместимости.
+By default, the collector reads configuration from `.env` / `core.settings`. `collector.local.py` remains only as an optional legacy override with a top-level `CONFIG` dictionary. JSON configs are read only for backward compatibility.
 
-## Структура
+## Structure
 
-Подробное описание архитектурных границ: `docs/ARCHITECTURE.md`.
+Detailed architecture boundaries: `docs/ARCHITECTURE.md`.
 
 ```text
 LogStorm/
-├── analyzer/           # анализ посещаемости, загрузчики, валидаторы, отчеты
-├── api/                # FastAPI слой
-├── collector/          # сборщик событий и storage
-├── core/               # настройки, общие модели и repositories
-├── data/               # локальные тестовые/примерные данные
-├── tests/              # pytest-контур
-├── tools/export/       # экспорт событий из устройства
-└── utils/              # даты, Excel helpers, исключения, логирование
+├── analyzer/           # attendance analysis, loaders, validators, reports
+├── api/                # FastAPI layer
+├── collector/          # event collector and storage
+├── core/               # settings, shared models, repositories
+├── data/               # local test/demo data
+├── tests/              # pytest suite
+├── tools/export/       # device event export
+└── utils/              # dates, Excel helpers, exceptions, logging
 ```
 
-## Что сейчас не является приоритетом
+## Out Of Active Scope
 
-- GUI удален из active scope.
-- AI-интеграция удалена из текущего кода и документации.
-- Старые пути `LogsCam/`, `path/person_prefs.json`, `run_gui.py`, `gui/`,
-  `gui_app.py`, `gui_config.py`, `gui_app_fluent.py`, `config.json`,
-  `config.py` не являются актуальной структурой.
+- GUI is removed from the active scope.
+- AI integration is removed from the current code and documentation.
+- Old paths such as `LogsCam/`, `path/person_prefs.json`, `run_gui.py`, `gui/`, `gui_app.py`, `gui_config.py`, `gui_app_fluent.py`, `config.json`, and `config.py` are not part of the current structure.

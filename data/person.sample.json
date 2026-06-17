@@ -1,0 +1,41 @@
+{
+  "README": "Synthetic sample mapping for tests and documentation. Do not put real employee data here.",
+  "person_mappings": {
+    "19": {
+      "display_name": "Employee Alpha",
+      "original_names": ["Employee Alpha", "Alpha A."],
+      "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "09:00",
+      "end_time": "18:00",
+      "work_hours": 9
+    },
+    "42": {
+      "display_name": "Employee Beta",
+      "original_names": ["Employee Beta"],
+      "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "09:00",
+      "end_time": "18:00",
+      "work_hours": 9
+    },
+    "55": {
+      "display_name": "Employee Delta",
+      "original_names": ["Employee Delta"],
+      "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "09:00",
+      "end_time": "18:00",
+      "work_hours": 9
+    },
+    "77": {
+      "display_name": "Employee Gamma",
+      "original_names": ["Employee Gamma"],
+      "workdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "start_time": "09:00",
+      "end_time": "18:00",
+      "work_hours": 9
+    }
+  },
+  "aliases": {
+    "NOTE": "Synthetic alias example: secondary IDs are resolved to a primary person ID.",
+    "19": ["666"]
+  }
+}

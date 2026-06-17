@@ -66,8 +66,12 @@ reports/
 
 # Сохраняем примеры
 !data/.gitkeep
+!data/attendance.csv
 !data/person.sample.json
+!data/vhod.ndjson
+!data/vihod.ndjson
 !logs/.gitkeep
+!reports/
 !reports/.gitkeep
 
 # Collector (конфиг с паролями)

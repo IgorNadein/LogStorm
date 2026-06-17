@@ -1,0 +1,4 @@
+{"time":"2026-04-20T08:54:00+03:00","employeeNoString":"19","name":"Employee Alpha","cardNo":"100019","major":5,"minor":75,"serialNo":"SAMPLE-ENTRY-001"}
+{"time":"2026-04-20T09:12:00+03:00","employeeNoString":"42","name":"Employee Beta","cardNo":"100042","major":5,"minor":75,"serialNo":"SAMPLE-ENTRY-002"}
+{"time":"2026-04-21T08:59:00+03:00","employeeNoString":"666","name":"Alpha A.","cardNo":"100666","major":5,"minor":75,"serialNo":"SAMPLE-ENTRY-003"}
+{"time":"2026-04-21T09:03:00+03:00","employeeNoString":"77","name":"Employee Gamma","cardNo":"100077","major":5,"minor":75,"serialNo":"SAMPLE-ENTRY-004"}

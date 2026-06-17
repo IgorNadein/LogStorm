@@ -1,0 +1,9 @@
+timestamp,name,event_type
+2026-04-20 08:54:00,employee_alpha,entry
+2026-04-20 18:07:00,employee_alpha,exit
+2026-04-20 09:12:00,employee_beta,entry
+2026-04-20 17:58:00,employee_beta,exit
+2026-04-21 08:59:00,employee_alpha,entry
+2026-04-21 18:03:00,employee_alpha,exit
+2026-04-21 09:03:00,employee_gamma,entry
+2026-04-21 17:51:00,employee_gamma,exit
